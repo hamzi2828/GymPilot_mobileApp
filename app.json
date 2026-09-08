@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "GymPilot_mobileApp",
-    "slug": "GymPilot_mobileApp",
+    "name": "GymPilot",
+    "slug": "gympilot",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "gympilotmobileapp",
+    "scheme": "gympilot",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -35,8 +35,8 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    }
+      "typedRoutes": true
+    },
+    "description": "Your gym in your pocket: book classes, check in, and manage your membership."
   }
 }

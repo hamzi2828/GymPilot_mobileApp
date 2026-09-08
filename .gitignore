@@ -41,3 +41,10 @@ example
 # generated native folders
 /ios
 /android
+
+# Local settings -- the API address this build talks to (see .env.example)
+.env
+
+# Editor and tool settings that belong to a machine, not to the app
+.claude/
+.vscode/
