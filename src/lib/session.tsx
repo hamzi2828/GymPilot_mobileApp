@@ -10,13 +10,19 @@ import { getItem, removeItem, setItem } from "./storage";
 import { paletteFrom, type Palette } from "./theme";
 import type { Branding, Member } from "./types";
 
-const KEY = "gympilot.session";
+// Kept as two records rather than one. Secure Store is a keychain, not a
+// database: Android warns above 2048 bytes per value and can refuse to write
+// one. The token and its gym are tiny and must survive; the member and the
+// gym's branding are larger, and if they are ever lost the app simply asks
+// the API for them again.
+const AUTH_KEY = "gympilot.auth";
+const LOOK_KEY = "gympilot.gym";
 
 interface Stored {
   token: string;
   gymSlug: string;
   gymName: string;
-  user: Member;
+  user: Member | null;
   branding: Branding | null;
 }
 
@@ -42,11 +48,27 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    getItem(KEY)
-      .then((raw) => {
-        if (cancelled || !raw) return;
+    Promise.all([getItem(AUTH_KEY), getItem(LOOK_KEY)])
+      .then(([authRaw, lookRaw]) => {
+        if (cancelled || !authRaw) return;
         try {
-          setStored(JSON.parse(raw) as Stored);
+          const auth = JSON.parse(authRaw) as Pick<Stored, "token" | "gymSlug" | "gymName">;
+          if (!auth.token || !auth.gymSlug) return;
+          // The second half is a convenience: without it the member is still
+          // signed in, and the next refresh puts their gym's colours back.
+          let look: Partial<Stored> = {};
+          try {
+            look = lookRaw ? (JSON.parse(lookRaw) as Partial<Stored>) : {};
+          } catch {
+            /* keep the session, lose the decoration */
+          }
+          setStored({
+            token: auth.token,
+            gymSlug: auth.gymSlug,
+            gymName: auth.gymName || "",
+            user: look.user || null,
+            branding: look.branding || null,
+          });
         } catch {
           /* a corrupt session is no session */
         }
@@ -61,8 +83,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const persist = useCallback(async (next: Stored | null) => {
     setStored(next);
-    if (next) await setItem(KEY, JSON.stringify(next));
-    else await removeItem(KEY);
+    if (!next) {
+      await Promise.all([removeItem(AUTH_KEY), removeItem(LOOK_KEY)]);
+      return;
+    }
+    await Promise.all([
+      setItem(AUTH_KEY, JSON.stringify({ token: next.token, gymSlug: next.gymSlug, gymName: next.gymName })),
+      setItem(LOOK_KEY, JSON.stringify({ user: next.user, branding: next.branding })),
+    ]);
   }, []);
 
   const signOut = useCallback(async () => {
