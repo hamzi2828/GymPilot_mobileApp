@@ -5,7 +5,7 @@
 // app has to say it -- and the server refuses a token whose gym does not
 // match, so the header cannot be used to reach anybody else's data.
 
-import { API_URL } from "./config";
+import { API_CONFIGURED, API_URL, NOT_CONFIGURED_MESSAGE } from "./config";
 import type { LoginResponse } from "./types";
 
 export class ApiError extends Error {
@@ -33,10 +33,22 @@ const SESSION_OVER = new Set(["TOKEN_MISSING", "TOKEN_INVALID", "TOKEN_WRONG_GYM
 
 export const SESSION_ENDED_MESSAGE = "Your session ended. Please sign in again.";
 
+// The server's names for "the whole gym is closed to its members right now":
+// suspended by the platform, its GymPilot subscription lapsed (which also
+// answers 402), or the member app switched off for it. Every request fails
+// the same way then, so screens say it once rather than under every section.
+const GYM_CLOSED = new Set(["TENANT_SUSPENDED", "SUBSCRIPTION_INACTIVE", "MEMBER_APP_NOT_INCLUDED"]);
+
+export function isGymClosed(status: number | null | undefined, code: string | null | undefined): boolean {
+  return status === 402 || (!!code && GYM_CLOSED.has(code));
+}
+
 type Options = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   session?: Session | null;
+  /** Names the gym for a call that has no session to name it (push removal). */
+  gym?: string;
   /**
    * Called, with the server's own words, when the token itself is refused --
    * so the app can sign out and tell the member why.
@@ -45,12 +57,17 @@ type Options = {
 };
 
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
-  const { method = "GET", body, session, onUnauthorised } = options;
+  const { method = "GET", body, session, gym, onUnauthorised } = options;
+
+  // A build with no real server address: say that, rather than "cannot
+  // reach your gym", which would send the member off checking their wifi.
+  if (!API_CONFIGURED) throw new ApiError(NOT_CONFIGURED_MESSAGE, 0);
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (session?.token) headers.Authorization = `Bearer ${session.token}`;
-  if (session?.gymSlug) headers["X-Tenant-Slug"] = session.gymSlug;
+  const tenant = session?.gymSlug || gym;
+  if (tenant) headers["X-Tenant-Slug"] = tenant;
 
   // A request that never answers would otherwise leave a spinner up for
   // good; twenty seconds is longer than any honest answer takes.

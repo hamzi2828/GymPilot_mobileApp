@@ -7,6 +7,9 @@
 //
 // The answer is the same whether or not the username exists. A form that
 // said "no such member" would be a way to check who trains where.
+//
+// It is also how a member who joined with Google on the website gets a
+// password for the app: their account has none until they set one here.
 
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -54,6 +57,9 @@ export default function Forgot() {
           <Title>Forgot your password?</Title>
           <Caption style={{ marginTop: 6, textAlign: "center", fontSize: 14 }}>
             Tell us your username and we will email you a link to choose a new one.
+          </Caption>
+          <Caption style={{ marginTop: 6, textAlign: "center", fontSize: 13 }}>
+            Joined with Google? This is how you set a password for the app.
           </Caption>
         </View>
 

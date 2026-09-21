@@ -16,7 +16,7 @@ only way in is a username the gym issued.
 | **Home**       | Check in, the gym's announcements, the membership at a glance, the next classes they booked, and how much they have trained. |
 | **Classes**    | The gym's timetable, day by day. Book a class, join the waitlist when it is full, cancel a booking — with a warning when the cancel is a late one. |
 | **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — and a way to the website for plans and invoice PDFs. |
-| **Profile**    | Their details, their sign-in username, notification switches, the gym's phone/email/website/opening hours, changing their password, signing out. |
+| **Profile**    | Their details, their sign-in username, notification switches, the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
 | **Check in**   | A QR code the front desk scans, with a short countdown and a typed fallback number. |
 | **Visits**     | Every visit the desk has recorded, month by month. |
 | **Bookings**   | Every class they booked before today: attended, missed, cancelled, cancelled late. |
@@ -49,6 +49,13 @@ A gym without it answers `403 { code: "MEMBER_APP_NOT_INCLUDED" }` and the
 sign-in screen shows the server's message. The check runs after the password,
 so it cannot be used to find out which usernames exist.
 
+A phone keeps its token for 30 days, so the check does not stop at sign-in.
+Tokens issued here carry `app: "member"`, and for those tokens (only those —
+website and desktop tokens are untouched) the server's `auth` middleware asks
+again, at most once a minute per gym, and answers the same 403 once the add-on
+is gone. The session is kept; every screen shows the same notice (below) until
+the gym has the app again.
+
 ### Two-factor sign-in
 
 Accounts that switched on "sign in with an emailed code" (and all staff, when
@@ -67,6 +74,10 @@ reset link the gym's website sends. The link opens on the website, where the
 new password is chosen; the app has no reset page of its own. The answer is
 always the same generic 200, whether or not the username exists.
 
+It is also how a member who joined with Google on the website gets a password
+for the app — that account has none until they set one — and the sign-in and
+forgot-password screens say so.
+
 ### When a session ends
 
 The server marks every refused token with a `code` — `TOKEN_MISSING`,
@@ -74,8 +85,19 @@ The server marks every refused token with a `code` — `TOKEN_MISSING`,
 deactivated, or signed out everywhere). Only those sign the member out; the
 sign-in screen then shows the server's reason. Any other 401 — a wrong current
 password, a wrong 2FA code — is shown where it happened and the session stays.
-A suspended gym, or one whose subscription lapsed, shows one notice on Home
-with a Sign out button rather than an error under every section.
+A suspended gym, one whose subscription lapsed, or one without the member app
+(`TENANT_SUSPENDED`, `SUBSCRIPTION_INACTIVE` / any 402,
+`MEMBER_APP_NOT_INCLUDED`) shows one notice with a Sign out button on every
+screen — whether a screen's own loading or one of its buttons ran into it —
+rather than an error under every section. Pulling down to refresh tries again.
+
+### Deleting an account
+
+**Profile → Delete my account** asks first — and says that it does not cancel
+a membership that renews automatically — then calls `DELETE /user`. On success
+the phone is taken off the gym's push list and the app signs out. The server
+deletes the account and releases the username; the last active administrator
+of a gym is refused, with the server's reason shown.
 
 ## How it gets the gym's look
 
@@ -94,18 +116,43 @@ browser rather than the PDF directly.
 
 If the gym changes its scheme, the app picks it up the next time the member
 opens their profile (`GET /api/mobile/branding?gym=<slug>`), without a new
-sign-in. A logo that fails to load falls back to the gym's initial.
+sign-in; the same refresh re-reads the member (`GET /userDetailForProfile`), so
+a name the front desk corrected reaches Home too. A profile edit updates the
+stored member as soon as it is saved. A logo that fails to load falls back to
+the gym's initial.
+
+The session is kept in three Secure Store entries — the token and gym slug,
+the member, and the branding — so a branding record too big for Android's
+keychain cannot take the member's name with it. A reply that comes back after
+a sign-out is dropped rather than written back.
 
 ## Push notifications
 
 Expo's push service carries them, so a gym needs no keys of its own. After
 sign-in (and on every launch with a session) the app asks for permission, gets
 an Expo push token and registers it with
-`POST /api/mobile/push/register { token, platform, deviceName }`; sign-out
-sends `DELETE /api/mobile/push/register { token }`. The server keeps one row
-per token in the gym's own database and sends to it wherever it already sends
-web push — booking confirmations, reminders, campaigns — dropping tokens Expo
+`POST /api/mobile/push/register { token, platform, deviceName }`. The server
+keeps one row per token in the gym's own database — registering a token moves
+it to the member now signed in — and sends to it wherever it already sends web
+push — booking confirmations, reminders, campaigns — dropping tokens Expo
 reports as `DeviceNotRegistered`.
+
+Sign-out sends `DELETE /api/mobile/push/register { token }` with the gym's
+`X-Tenant-Slug` and **no** sign-in token, before anything is cleared: the push
+token is the proof, so it still works when the server has already ended the
+session (30 days up, a password change, "sign out everywhere", a deactivated
+account) — the usual reason for signing out. A removal that cannot get through
+is remembered on the phone and tried again on the next launch or sign-in, and
+a phone that signs in at a different gym comes off the previous gym's list
+first.
+
+Tapping a notification opens the screen it is about. The server sends the
+gym's website address (`data.url`); the app reads its path and `?tab=`:
+`/timetable` and `/user-detail?tab=bookings` → Classes, `/packages` and
+`?tab=history` → Membership, `?tab=visits` → Visits, `?tab=checkin` → Check in,
+`/user-detail` → Home. Anything else (a campaign linking to a blog post) just
+opens the app. A tap that launched the app waits for the stored session, and a
+tap while nobody is signed in goes nowhere.
 
 Nothing is registered on the web build, on a simulator, or in a build whose
 `app.json` still carries the `REPLACE_WITH_EAS_PROJECT_ID` placeholder (the
@@ -129,6 +176,13 @@ cannot reach `localhost`, so during development set `EXPO_PUBLIC_API_URL` to the
 address Expo prints, e.g. `http://192.168.1.20:4000`. The sign-in screen shows
 the address a development build is pointed at; store builds do not.
 
+`EXPO_PUBLIC_API_URL` is the only place the address comes from, and it is baked
+in when the app is built. A development build with none falls back to
+`http://localhost:4000`; a release build has no fallback. A build with no
+address, or still on the `https://api.example.com` placeholder, shows "This app
+build isn't configured with a server address" on the sign-in screen and
+disables signing in, rather than failing as if the gym were offline.
+
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint
@@ -143,17 +197,34 @@ message rather than a spinner for good.
 The identifiers are set: `app.gympilot.member` for both the iOS bundle id and
 the Android package, phones only on iOS. `eas.json` carries three profiles —
 `development` (dev client, internal), `preview` (internal) and `production`
-(auto-incremented build numbers) — each with its own `EXPO_PUBLIC_API_URL`;
-change the placeholder addresses before building.
+(auto-incremented build numbers) — each with its own `EXPO_PUBLIC_API_URL`.
+The addresses in the file are placeholders; nothing below invents real ones.
 
 1. `npm install -g eas-cli && eas login`
-2. `eas init` — links the app to an EAS project and writes the real
-   `extra.eas.projectId` into `app.json` in place of `REPLACE_WITH_EAS_PROJECT_ID`.
-   Push tokens cannot be issued without it.
-3. `eas credentials` — for Android push, upload an FCM V1 service account
-   key; iOS push uses the APNs key EAS creates. Both are stored on EAS, not in
-   this repo.
-4. `eas build --profile preview --platform all` for a build to hand to testers;
+2. **Server address.** In `eas.json`, set `build.preview.env.EXPO_PUBLIC_API_URL`
+   and `build.production.env.EXPO_PUBLIC_API_URL` to your GymPilot backend's
+   public `https://` address (no trailing slash), and
+   `build.development.env.EXPO_PUBLIC_API_URL` to your machine's LAN address.
+   Left at `https://api.example.com`, the build installs but cannot sign
+   anyone in (see **Running it**).
+3. **EAS project.** `eas init` — links the app to an EAS project and writes the
+   real `extra.eas.projectId` into `app.json` in place of
+   `REPLACE_WITH_EAS_PROJECT_ID`. Push tokens cannot be issued without it; until
+   then the app registers nothing.
+4. **Android push (FCM).** In the Firebase console, create a project (or use
+   yours), add an Android app with the package `app.gympilot.member`, and
+   download its `google-services.json` into this folder. Point the app at it in
+   `app.json`, under `expo.android`: `"googleServicesFile": "./google-services.json"`.
+   Then, in Firebase → Project settings → Service accounts, generate a private
+   key and upload it with `eas credentials` → Android → production → Google
+   Service Account → *FCM V1*. The key is stored on EAS; never commit it.
+5. **iOS push (APNs).** `eas credentials` → iOS, or the first `eas build`,
+   offers to create the APNs key and stores it on EAS.
+6. **Server side.** Nothing is needed for plain Expo push. If you switch on
+   *enhanced push security* for the project on expo.dev, create an access token
+   there and set it as `EXPO_ACCESS_TOKEN` in the backend's environment — the
+   backend sends it with every push (`src/services/messaging.js`).
+7. `eas build --profile preview --platform all` for a build to hand to testers;
    `eas build --profile production --platform all` then `eas submit` for the
    stores.
 
@@ -167,7 +238,7 @@ and want replacing before a store submission.
 ```
 src/
   app/                    expo-router: the file tree is the navigation
-    _layout.tsx           session provider, stack, status bar
+    _layout.tsx           session provider, stack, status bar, notification taps
     index.tsx             signed in? → tabs, otherwise → login
     login.tsx             username + password, the 2FA code step, no sign-up
     forgot.tsx            username → reset link by email
@@ -182,14 +253,14 @@ src/
   lib/
     api.ts                one fetch, both headers, one error type, the 20 s timeout
     session.tsx           who is signed in, their gym, its colours, why a session ended
-    push.ts               permission, the Expo push token, register / unregister
+    push.ts               permission, the Expo push token, register / unregister, what a tap opens
     useRequireSession.ts  send a signed-out member to the sign-in screen
     theme.ts              six tokens → a full palette
     types.ts              the shapes the API actually returns
     format.ts             money, dates, durations
     useLoad.ts            loading / error / refresh, reloaded on focus
     storage.ts            SecureStore on a device, localStorage on web
-    config.ts             EXPO_PUBLIC_API_URL
+    config.ts             EXPO_PUBLIC_API_URL, and whether this build has a real one
 ```
 
 ## What it calls
@@ -203,8 +274,8 @@ the tenant header:
 | `POST /api/mobile/auth/login/2fa` | challengeId + code + gym → the same payload as sign-in |
 | `POST /api/mobile/auth/forgot` | username → the website's reset email; always 200 |
 | `GET /api/mobile/branding?gym=` | logo, colours, site address and contact details, refreshed later |
-| `POST` · `DELETE /api/mobile/push/register` | this phone's Expo push token, on sign-in and sign-out |
-| `GET /userDetailForProfile` · `PUT /update/user` · `PUT /user/change-password` | the member's own record (these sit at the server root, not under `/api`) |
+| `POST` · `DELETE /api/mobile/push/register` | this phone's Expo push token, on sign-in and sign-out (the `DELETE` needs only the gym slug, no sign-in) |
+| `GET /userDetailForProfile` · `PUT /update/user` · `PUT /user/change-password` · `DELETE /user` | the member's own record, and deleting it (these sit at the server root, not under `/api`) |
 | `GET` · `PUT /user/notification-preferences` · `GET /announcements/active` | how they want to hear from the gym, and what the gym is saying (also at the root) |
 | `GET /api/attendance/me` · `GET /api/attendance/me/qr` | visits, and the check-in code |
 | `GET /api/gymfolio/timetable` · `POST /api/gymfolio/bookings` · `DELETE /api/gymfolio/bookings/:id` · `GET /api/gymfolio/bookings/me?scope=past` | classes, and the booking history |

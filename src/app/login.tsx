@@ -8,13 +8,16 @@
 // Accounts that switched on two-factor sign-in get a second step here: the
 // six-digit code the server emailed them. A wrong code costs one of five
 // tries and sends nothing; "Send a new code" is the first step again.
+//
+// A build made without a real server address cannot sign anyone in, and
+// says so here rather than failing with "cannot reach your gym".
 
 import React, { useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Button, Caption, Field, Notice, Title } from "@/components/ui";
-import { API_HINT } from "@/lib/config";
+import { API_CONFIGURED, API_HINT, NOT_CONFIGURED_MESSAGE } from "@/lib/config";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 
@@ -110,6 +113,7 @@ export default function Login() {
           </Caption>
         </View>
 
+        {!API_CONFIGURED ? <Notice tone="error">{NOT_CONFIGURED_MESSAGE}</Notice> : null}
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="warn">{notice}</Notice> : null}
         {!challenge && !error && signOutReason ? <Notice tone="warn">{signOutReason}</Notice> : null}
@@ -159,11 +163,21 @@ export default function Login() {
               onSubmitEditing={submit}
             />
 
-            <Button label="Sign in" onPress={submit} busy={busy} />
+            <Button label="Sign in" onPress={submit} busy={busy} disabled={!API_CONFIGURED} />
 
-            <Pressable onPress={() => router.push("/forgot")} hitSlop={10} style={{ alignSelf: "center", marginTop: space.lg }} disabled={busy}>
+            <Pressable
+              onPress={() => router.push("/forgot")}
+              hitSlop={10}
+              style={{ alignSelf: "center", marginTop: space.lg }}
+              disabled={busy || !API_CONFIGURED}
+            >
               <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Forgot password?</Body>
             </Pressable>
+            {/* An account made with Google on the website has no password
+                until the member sets one through the reset link. */}
+            <Caption style={{ marginTop: space.sm, textAlign: "center", fontSize: 12.5 }}>
+              Joined with Google? Use Forgot password to set one.
+            </Caption>
           </>
         )}
 
