@@ -7,8 +7,9 @@ import { useFocusEffect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
-import { Body, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
 import { dayLabel, longDate, relativeDays, timeRange } from "@/lib/format";
+import { awaitingPayment, currentMembership, endDateLabel, SITE_ACCOUNT_HISTORY, SITE_PACKAGES, statusPill } from "@/lib/membership";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -20,7 +21,10 @@ export default function Home() {
   const router = useRouter();
 
   const attendance = useLoad<{ summary: AttendanceSummary }>("/api/attendance/me?limit=1");
-  const memberships = useLoad<{ data: MembershipOrder[] }>("/api/gymfolio/package-orders/me?limit=5");
+  // The same page the Membership tab asks for. Orders come newest first, and
+  // checkouts opened and never paid are orders too: a short page could be
+  // all of those, with the membership itself on the next one.
+  const memberships = useLoad<{ data: MembershipOrder[] }>("/api/gymfolio/package-orders/me?limit=20");
   const timetable = useLoad<TimetableResponse>("/api/gymfolio/timetable");
   const announcements = useLoad<{ data: Announcement[] }>("/announcements/active");
 
@@ -28,7 +32,13 @@ export default function Home() {
   // once, with a way out, rather than under every section.
   const closed = useGymClosed(memberships, timetable, attendance);
 
-  const active = (memberships.data?.data || []).find((o) => o.status === "active") || (memberships.data?.data || [])[0] || null;
+  // Only a paid, live order is "your membership" (see lib/membership).
+  const active = currentMembership(memberships.data?.data || []);
+  const waiting = awaitingPayment(memberships.data?.data || []);
+  const siteUrl = branding?.siteUrl || "";
+  const openSite = (path: string) => {
+    if (siteUrl) WebBrowser.openBrowserAsync(`${siteUrl}${path}`);
+  };
   // The clock, read when the screen opens rather than on every render.
   const [openedAt, setOpenedAt] = useState(0);
   useFocusEffect(
@@ -74,7 +84,7 @@ export default function Home() {
         <>
           {/* What the gym has to say. */}
           {notices.map((a) => (
-            <AnnouncementCard key={a.id} announcement={a} siteUrl={branding?.siteUrl || ""} />
+            <AnnouncementCard key={a.id} announcement={a} siteUrl={siteUrl} />
           ))}
 
           {/* Check in. The one thing they open the app for at the door. */}
@@ -107,28 +117,58 @@ export default function Home() {
             <Loading />
           ) : memberships.error ? (
             <Notice tone="error">{memberships.error}</Notice>
-          ) : !active ? (
-            <Empty title="No membership yet" hint="Speak to the front desk and they will set one up for you." />
-          ) : (
+          ) : active ? (
             <Card style={{ marginBottom: space.xl }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: space.md }}>
                 <View style={{ flex: 1 }}>
                   <Body style={{ fontWeight: "700", fontSize: 17 }}>{active.packageDetails?.name || "Membership"}</Body>
                   <Caption style={{ marginTop: 2 }}>{active.orderNumber}</Caption>
                 </View>
-                <Pill
-                  label={active.freeze?.isFrozen ? "paused" : active.status}
-                  tone={active.freeze?.isFrozen ? "warn" : active.status === "active" ? "good" : active.status === "expired" ? "bad" : "neutral"}
-                />
+                <Pill label={statusPill(active).label} tone={statusPill(active).tone} />
               </View>
               <Divider />
               {active.subscription?.endDate ? (
-                <Line label={active.status === "expired" ? "Ended" : "Runs until"} value={`${longDate(active.subscription.endDate)} · ${relativeDays(active.subscription.endDate)}`} />
+                <Line label={endDateLabel(active)} value={`${longDate(active.subscription.endDate)} · ${relativeDays(active.subscription.endDate)}`} />
               ) : null}
               {active.packageDetails?.sessions ? (
                 <Line label="Sessions left" value={`${Math.max(0, (active.sessions?.total || 0) - (active.sessions?.used || 0))} of ${active.sessions?.total || 0}`} />
               ) : null}
+              {/* A renewal the card could not pay for: the new card goes in
+                  on the website's account page. */}
+              {active.status === "past_due" ? (
+                <Pressable
+                  onPress={() => openSite(SITE_ACCOUNT_HISTORY)}
+                  disabled={!siteUrl}
+                  hitSlop={8}
+                  style={{ marginTop: space.sm, alignSelf: "flex-start" }}
+                >
+                  <Body style={{ color: p.danger, fontWeight: "700", fontSize: 14 }}>
+                    Payment failed — update your card on the website{siteUrl ? " ›" : ""}
+                  </Body>
+                </Pressable>
+              ) : null}
             </Card>
+          ) : waiting.length > 0 ? (
+            // Bought, not paid for yet: said as that, never as the membership.
+            // The Membership tab has the bank details and what to do next.
+            <Card style={{ marginBottom: space.xl }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: space.md }}>
+                <View style={{ flex: 1 }}>
+                  <Body style={{ fontWeight: "700", fontSize: 17 }}>{waiting[0].packageDetails?.name || "Membership"}</Body>
+                  <Caption style={{ marginTop: 2 }}>{waiting[0].orderNumber}</Caption>
+                </View>
+                <Pill label="awaiting payment" tone="warn" />
+              </View>
+              <Divider />
+              <Caption>Awaiting payment confirmation. It starts once the gym has your payment; the Membership tab has the details.</Caption>
+            </Card>
+          ) : (
+            <>
+              <Empty title="No membership yet" hint="Join on your gym's website, or ask at the front desk and they will set one up for you." />
+              {siteUrl ? (
+                <Button label="See plans on the website" variant="secondary" onPress={() => openSite(SITE_PACKAGES)} style={{ marginTop: space.md, marginBottom: space.xl }} />
+              ) : null}
+            </>
           )}
 
           {/* What they have booked */}

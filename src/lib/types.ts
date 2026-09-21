@@ -75,13 +75,20 @@ export interface Visit {
   date_label: string;
   day_name: string;
   check_in_time: string;
-  check_out_time: string;
+  /** null until they check out, and for good on a visit that never had one. */
+  check_out_time: string | null;
   still_in: boolean;
+  /** Ended without a check-out (closed by the daily job, or past the window): no time out and no duration. */
+  no_check_out?: boolean;
   minutes: number | null;
-  duration_label: string;
+  duration_label: string | null;
   package_name: string;
   status: string;
   status_label: string;
+  /** Corrected by the gym after the fact. Not sent by every server yet. */
+  edited?: boolean;
+  /** Struck out by the gym: not a visit at all. Not sent by every server yet. */
+  voided?: boolean;
 }
 
 export interface AttendanceMonth {
@@ -205,12 +212,26 @@ export interface MembershipOrder {
     startDate: string | null;
     endDate: string | null;
     isActive: boolean;
+    /** Already true on a card checkout before it is paid: see renewsAutomatically in lib/membership. */
     autoRenew: boolean;
     cancelAtPeriodEnd: boolean;
+    /** Stripe's own status for the subscription behind the order ('canceled' once it has ended); '' when there is none. */
+    stripeStatus?: string;
   };
   sessions: { total: number; used: number };
   freeze: { isFrozen: boolean; frozenAt: string | null; resumeAt: string | null; totalFrozenDays: number };
-  payment: { status: string; method: string; amount: number; currency: string };
+  payment: {
+    /** pending | processing | paid | failed | refunded | cancelled */
+    status: string;
+    /** stripe (online card checkout) | card (desk terminal) | bank_transfer | cash */
+    method: string;
+    amount: number;
+    currency: string;
+    /** Only an order with a Stripe subscription behind it renews by itself. */
+    stripeSubscriptionId?: string | null;
+    /** Why the last charge failed, on a past-due membership. */
+    lastPaymentError?: string;
+  };
   invoice?: { number?: string } | null;
 }
 
