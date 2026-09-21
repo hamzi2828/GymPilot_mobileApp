@@ -30,7 +30,8 @@ export default function Attendance() {
   const data = attendance.data;
   const summary = data?.summary;
   const months = data?.months || [];
-  const visits = data?.visits || [];
+  // A visit the gym struck out was never a visit.
+  const visits = (data?.visits || []).filter((v) => !v.voided);
   const closed = useGymClosed(attendance);
 
   return (
@@ -99,9 +100,19 @@ export default function Attendance() {
                       </Body>
                       {v.package_name ? <Caption style={{ marginTop: 2 }}>{v.package_name}</Caption> : null}
                     </View>
+                    {/* A visit nobody checked out of has no time out and no
+                        length -- the server will not invent one, so neither
+                        does the app. */}
                     <View style={{ alignItems: "flex-end", gap: 4 }}>
-                      {v.still_in ? <Pill label="inside" tone="good" /> : <Body style={{ fontWeight: "700", fontSize: 14 }}>{v.duration_label || "—"}</Body>}
+                      {v.still_in ? (
+                        <Pill label="inside" tone="good" />
+                      ) : v.no_check_out ? (
+                        <Body muted style={{ fontSize: 13 }}>No check-out</Body>
+                      ) : (
+                        <Body style={{ fontWeight: "700", fontSize: 14 }}>{v.duration_label || "—"}</Body>
+                      )}
                       {v.status_label ? <Caption>{v.status_label}</Caption> : null}
+                      {v.edited ? <Caption>edited by the gym</Caption> : null}
                     </View>
                   </View>
                 </Card>
