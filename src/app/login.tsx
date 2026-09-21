@@ -4,9 +4,13 @@
 // no "create an account": a member exists because a gym put them on its
 // books, and letting anyone sign themselves up would put strangers inside
 // somebody's gym.
+//
+// Accounts that switched on two-factor sign-in get a second step here: the
+// six-digit code the server emailed them. A wrong code costs one of five
+// tries and sends nothing; "Send a new code" is the first step again.
 
 import React, { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Button, Caption, Field, Notice, Title } from "@/components/ui";
@@ -15,7 +19,7 @@ import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 
 export default function Login() {
-  const { signIn } = useSession();
+  const { signIn, completeTwoFactor, signOutReason } = useSession();
   const router = useRouter();
   const p = usePalette();
   const insets = useSafeAreaInsets();
@@ -25,6 +29,11 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // The second step, when there is one. The gym slug travels with the
+  // challenge: it tells the server which gym's database holds it.
+  const [challenge, setChallenge] = useState<{ id: string; gymSlug: string } | null>(null);
+  const [code, setCode] = useState("");
 
   const submit = async () => {
     if (!username.trim() || !password) {
@@ -37,9 +46,12 @@ export default function Login() {
     try {
       const result = await signIn(username, password);
       if (result.requires2fa) {
-        // Rare, and only for accounts that switched it on. Finishing it needs
-        // the emailed code, which the website handles today.
-        setNotice(result.message || "Your gym asks for a code by email. Please sign in on the website this time.");
+        if (!result.challengeId || !result.gymSlug) {
+          throw new Error("Your gym asks for a code by email, but the sign-in could not be started. Please try again.");
+        }
+        setChallenge({ id: result.challengeId, gymSlug: result.gymSlug });
+        setCode("");
+        setNotice(result.message || "We emailed you a 6-digit code.");
         return;
       }
       router.replace("/(tabs)");
@@ -50,6 +62,40 @@ export default function Login() {
     }
   };
 
+  const verify = async () => {
+    if (!challenge) return;
+    const digits = code.replace(/\D/g, "");
+    if (digits.length !== 6) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await completeTwoFactor(challenge.id, digits, challenge.gymSlug);
+      router.replace("/(tabs)");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "That code did not work.";
+      setError(message);
+      // A challenge that has expired, or died of too many wrong codes, cannot
+      // be retried: the server says so in as many words, and the member
+      // starts again from the password.
+      if (/sign in again/i.test(message)) {
+        setChallenge(null);
+        setNotice(null);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const backToPassword = () => {
+    setChallenge(null);
+    setCode("");
+    setError(null);
+    setNotice(null);
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: p.base }}>
       <ScrollView
@@ -58,46 +104,74 @@ export default function Login() {
       >
         <View style={{ alignItems: "center", marginBottom: space.xxl }}>
           <Image source={require("../../assets/images/icon.png")} style={{ width: 68, height: 68, borderRadius: 20 }} accessibilityLabel="GymPilot" />
-          <Title style={{ marginTop: space.lg }}>GymPilot</Title>
+          <Title style={{ marginTop: space.lg }}>{challenge ? "Check your email" : "GymPilot"}</Title>
           <Caption style={{ marginTop: 6, textAlign: "center", fontSize: 14 }}>
-            Sign in with the username and password your gym gave you.
+            {challenge ? "Type the 6-digit code we sent you to finish signing in." : "Sign in with the username and password your gym gave you."}
           </Caption>
         </View>
 
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="warn">{notice}</Notice> : null}
+        {!challenge && !error && signOutReason ? <Notice tone="warn">{signOutReason}</Notice> : null}
 
-        <Field
-          label="Username"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="username"
-          textContentType="username"
-          placeholder="e.g. saramalik284"
-          returnKeyType="next"
-        />
-        <Field
-          label="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete="current-password"
-          textContentType="password"
-          placeholder="••••••••"
-          returnKeyType="go"
-          onSubmitEditing={submit}
-        />
+        {challenge ? (
+          <>
+            <Field
+              label="Sign-in code"
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              placeholder="123456"
+              returnKeyType="go"
+              onSubmitEditing={verify}
+              style={{ letterSpacing: 6, fontSize: 22, textAlign: "center" }}
+            />
+            <Button label="Verify" onPress={verify} busy={busy} />
+            <Button label="Send a new code" variant="secondary" onPress={submit} disabled={busy} style={{ marginTop: space.sm }} />
+            <Button label="Back" variant="quiet" onPress={backToPassword} disabled={busy} style={{ marginTop: space.sm }} />
+          </>
+        ) : (
+          <>
+            <Field
+              label="Username"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
+              placeholder="e.g. saramalik284"
+              returnKeyType="next"
+            />
+            <Field
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="current-password"
+              textContentType="password"
+              placeholder="••••••••"
+              returnKeyType="go"
+              onSubmitEditing={submit}
+            />
 
-        <Button label="Sign in" onPress={submit} busy={busy} />
+            <Button label="Sign in" onPress={submit} busy={busy} />
+
+            <Pressable onPress={() => router.push("/forgot")} hitSlop={10} style={{ alignSelf: "center", marginTop: space.lg }} disabled={busy}>
+              <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Forgot password?</Body>
+            </Pressable>
+          </>
+        )}
 
         <View style={{ marginTop: space.xl, alignItems: "center", gap: 6 }}>
           <Body muted style={{ fontSize: 13.5, textAlign: "center" }}>
             No username yet? Ask at the front desk — your gym issues it.
           </Body>
-          <Caption style={{ fontSize: 11 }}>{API_HINT}</Caption>
+          {API_HINT ? <Caption style={{ fontSize: 11 }}>{API_HINT}</Caption> : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

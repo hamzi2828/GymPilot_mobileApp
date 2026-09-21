@@ -1,14 +1,16 @@
 import React from "react";
-import { Redirect, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import { CalendarIcon, CardIcon, HomeIcon, PersonIcon } from "@/components/icons";
-import { usePalette, useSession } from "@/lib/session";
+import { usePalette } from "@/lib/session";
+import { useRequireSession } from "@/lib/useRequireSession";
 
 export default function TabsLayout() {
-  const { ready, session } = useSession();
+  // Nothing behind the tabs is public. The hook sends a signed-out member
+  // to the sign-in screen; until then, nothing of theirs is drawn.
+  const { session } = useRequireSession();
   const p = usePalette();
 
-  // Nothing behind the tabs is public.
-  if (ready && !session) return <Redirect href="/login" />;
+  if (!session) return null;
 
   return (
     <Tabs

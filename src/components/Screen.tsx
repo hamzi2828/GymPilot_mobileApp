@@ -1,7 +1,7 @@
 // Every screen sits on the gym's own background, inside the safe area, and
 // pulls to refresh.
 
-import React from "react";
+import React, { useState } from "react";
 import { Image, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePalette, useSession } from "@/lib/session";
@@ -64,17 +64,31 @@ export function Screen({
   );
 }
 
-/** The gym's logo if it has one, its name if it does not. */
+/**
+ * The gym's logo if it has one, its name if it does not -- and its name
+ * again if the logo will not load, rather than a blank where a logo should
+ * be. A logo that fails once (the gym's site is down, the path is stale)
+ * stays swapped out until the screen is next mounted.
+ */
 export function GymMark({ size = 34 }: { size?: number }) {
   const { branding, gymName } = useSession();
   const p = usePalette();
   const logo = branding?.logoUrl;
+  const [broken, setBroken] = useState(false);
 
-  if (logo) {
+  if (logo && !broken) {
     const width = branding?.logoWidth || 160;
     const height = branding?.logoHeight || 56;
     const scaled = Math.min(size / height, 1) * 1.6;
-    return <Image source={{ uri: logo }} resizeMode="contain" style={{ width: width * scaled, height: size }} accessibilityLabel={gymName} />;
+    return (
+      <Image
+        source={{ uri: logo }}
+        resizeMode="contain"
+        style={{ width: width * scaled, height: size }}
+        accessibilityLabel={gymName}
+        onError={() => setBroken(true)}
+      />
+    );
   }
 
   return (

@@ -10,9 +10,14 @@
 //
 // Whether a member may freeze or cancel at all is the gym's decision and
 // arrives from /membership/rules; the server enforces it either way.
+//
+// Buying, renewing and invoices stay on the gym's website: paying is the
+// website's job, and the invoice PDF is served to a website sign-in, so the
+// app opens the website's account page rather than pretending otherwise.
 
 import React, { useState } from "react";
 import { Pressable, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { Screen } from "@/components/Screen";
 import { Body, Button, Caption, Card, Divider, Empty, Heading, Line, Loading, Notice, Pill } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
@@ -32,8 +37,12 @@ interface Rules {
 /** Statuses the server will accept a freeze or a cancel on. */
 const LIVE = ["active", "frozen", "past_due"];
 
+/** Where on the website these things live. */
+const SITE_PACKAGES = "/packages";
+const SITE_ACCOUNT_HISTORY = "/user-detail?tab=history";
+
 export default function Membership() {
-  const { session, signOut } = useSession();
+  const { session, signOut, branding } = useSession();
   const p = usePalette();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -51,6 +60,11 @@ export default function Membership() {
   const frozen = !!current && (current.status === "frozen" || !!current.freeze?.isFrozen);
   const live = !!current && LIVE.includes(current.status);
   const stopping = !!current?.subscription?.cancelAtPeriodEnd && current.status !== "cancelled";
+
+  const siteUrl = branding?.siteUrl || "";
+  const openSite = (path: string) => {
+    if (siteUrl) WebBrowser.openBrowserAsync(`${siteUrl}${path}`);
+  };
 
   const act = async (label: string, path: string, body?: unknown, confirmText?: string) => {
     if (confirmText) {
@@ -90,6 +104,15 @@ export default function Membership() {
     );
   };
 
+  // The invoice PDF needs the website's own sign-in, so the link goes to the
+  // account page there, where every invoice can be downloaded.
+  const invoiceLink = (o: MembershipOrder) =>
+    o.payment?.status === "paid" && siteUrl ? (
+      <Pressable onPress={() => openSite(SITE_ACCOUNT_HISTORY)} hitSlop={8} style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
+        <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Invoice PDF ›</Body>
+      </Pressable>
+    ) : null;
+
   return (
     <Screen title="Membership" refreshing={orders.refreshing} onRefresh={orders.reload}>
       {message ? <Notice tone={message.tone === "ok" ? "ok" : "error"}>{message.text}</Notice> : null}
@@ -98,7 +121,10 @@ export default function Membership() {
       {orders.loading ? (
         <Loading />
       ) : !current ? (
-        <Empty title="You do not have a membership yet" hint="The front desk can set one up for you, or you can join from your gym's website." />
+        <>
+          <Empty title="You do not have a membership yet" hint="The front desk can set one up for you, or you can join from your gym's website." />
+          {siteUrl ? <Button label="See plans on the website" onPress={() => openSite(SITE_PACKAGES)} style={{ marginTop: space.lg }} /> : null}
+        </>
       ) : (
         <>
           <Card style={{ marginBottom: space.lg }}>
@@ -131,6 +157,7 @@ export default function Membership() {
             {frozen && current.freeze?.resumeAt ? <Line label="Starts again" value={longDate(current.freeze.resumeAt)} /> : null}
             <Line label="Payment" value={`${current.payment?.status || "—"}${current.payment?.method ? ` · ${current.payment.method}` : ""}`} />
             {current.subscription?.autoRenew && !stopping ? <Line label="Renews automatically" value="yes" /> : null}
+            {invoiceLink(current)}
           </Card>
 
           {stopping ? (
@@ -237,13 +264,15 @@ export default function Membership() {
                   </View>
                   <Pill label={o.status} tone={o.status === "cancelled" ? "bad" : "neutral"} />
                 </View>
+                {invoiceLink(o)}
               </Card>
             ))}
           </View>
         </>
       ) : null}
 
-      {/* What else the gym sells, so a member can ask for it by name. */}
+      {/* What else the gym sells, so a member can ask for it by name -- or
+          go and buy it, on the website, where paying happens. */}
       {(onSale.data?.data || []).length > 0 ? (
         <>
           <Heading>What your gym offers</Heading>
@@ -262,7 +291,11 @@ export default function Membership() {
                 </View>
               </Card>
             ))}
-            <Caption style={{ marginTop: space.sm }}>To change what you are on, speak to the front desk or use your gym&apos;s website.</Caption>
+            {siteUrl ? (
+              <Button label="Renew or change your plan on the website" variant="secondary" onPress={() => openSite(SITE_PACKAGES)} style={{ marginTop: space.sm }} />
+            ) : (
+              <Caption style={{ marginTop: space.sm }}>To change what you are on, speak to the front desk or use your gym&apos;s website.</Caption>
+            )}
           </View>
         </>
       ) : null}

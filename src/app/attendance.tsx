@@ -11,9 +11,11 @@ import { Body, Button, Caption, Card, Divider, Empty, Heading, Line, Loading, No
 import { usePalette } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useLoad } from "@/lib/useLoad";
+import { useRequireSession } from "@/lib/useRequireSession";
 import type { AttendanceResponse } from "@/lib/types";
 
 export default function Attendance() {
+  useRequireSession();
   const p = usePalette();
   const router = useRouter();
   const [month, setMonth] = useState<string | null>(null);

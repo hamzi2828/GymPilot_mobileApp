@@ -15,6 +15,10 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
   const { session, signOut } = useSession();
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The server's name for what went wrong, and the status it came with, for
+  // the few screens that treat one failure differently from the rest.
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -27,14 +31,24 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
 
   const run = useCallback(
     async (isRefresh = false) => {
-      if (!path || !session) return;
+      if (!path || !session) {
+        // Nothing to ask for -- and nothing to wait for either, so no spinner
+        // is left running over an empty screen.
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       try {
         setData(await api<T>(path, { session, onUnauthorised: signOut }));
         setError(null);
+        setErrorCode(null);
+        setErrorStatus(null);
       } catch (e) {
         setError(e instanceof ApiError || e instanceof Error ? e.message : "Something went wrong.");
+        setErrorCode(e instanceof ApiError ? e.code || null : null);
+        setErrorStatus(e instanceof ApiError ? e.status : null);
       } finally {
         loadedOnce.current = true;
         setLoading(false);
@@ -53,5 +67,5 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
     }, [run])
   );
 
-  return { data, error, loading, refreshing, reload: () => run(true) };
+  return { data, error, errorCode, errorStatus, loading, refreshing, reload: () => run(true) };
 }

@@ -13,6 +13,8 @@ export interface ThemeTokens {
 export interface Branding {
   gym: { slug: string; name: string } | null;
   siteName: string;
+  /** The gym's website: where plans are bought and invoices live. */
+  siteUrl: string;
   logoUrl: string;
   logoWidth: number;
   logoHeight: number;
@@ -21,6 +23,9 @@ export interface Branding {
   themeTokens: ThemeTokens;
   currency: string;
   locale: { language: string; direction: "ltr" | "rtl" };
+  /** How to reach the gym, when Settings carries it. */
+  supportEmail: string;
+  phone: string;
   contact: { email: string; phone: string; address: string };
   openingHours: { day: string; open: string; close: string; closed: boolean }[];
   whatsapp: string;
@@ -138,12 +143,45 @@ export interface Session {
   my_booking: { id: string; status: string; waitlist_position?: number } | null;
 }
 
+export interface BookingRules {
+  horizon_days: number;
+  cutoff_minutes: number;
+  cancel_hours: number;
+  require_active_membership: boolean;
+  use_credits: boolean;
+}
+
 export interface TimetableResponse {
   success: boolean;
   range: { from: string; to: string; today: string };
   timezone: string;
-  rules: { horizon_days: number; cutoff_minutes: number; cancel_hours: number; require_active_membership: boolean; use_credits: boolean };
+  rules: BookingRules;
   data: Session[];
+}
+
+/** GET /api/gymfolio/bookings/me?scope=past → data[] */
+export interface BookingRecord {
+  id: string;
+  class_id: string;
+  class_name: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  instructor_name: string;
+  status: string;
+  waitlist_position: number | null;
+  credit_used: boolean;
+  late_cancel: boolean;
+  created_at: string;
+  cancelled_at: string | null;
+  attended_at: string | null;
+}
+
+export interface BookingsResponse {
+  success: boolean;
+  rules: BookingRules;
+  data: BookingRecord[];
+  counts: { upcoming: number };
 }
 
 /** GET /api/gymfolio/package-orders/me → data[] */
@@ -172,6 +210,7 @@ export interface MembershipOrder {
   sessions: { total: number; used: number };
   freeze: { isFrozen: boolean; frozenAt: string | null; resumeAt: string | null; totalFrozenDays: number };
   payment: { status: string; method: string; amount: number; currency: string };
+  invoice?: { number?: string } | null;
 }
 
 /** GET /api/gymfolio/packages/active → data[] */
@@ -204,4 +243,37 @@ export interface Profile {
   emergencyContact?: { name?: string; phone?: string; relationship?: string };
   addresses?: { _id?: string; address?: string; city?: string; state?: string; postalCode?: string; country?: string }[];
   createdAt?: string;
+}
+
+/** GET /announcements/active → data[] */
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  audience: "members" | "public" | "all";
+  tone: "info" | "success" | "warning";
+  url: string;
+  url_label: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** GET /user/notification-preferences → data */
+export interface NotificationPreferences {
+  email: boolean;
+  sms: boolean;
+  whatsapp: boolean;
+  push: boolean;
+  marketing: boolean;
+}
+
+export interface NotificationSettings {
+  preferences: NotificationPreferences;
+  phone: string;
+  /** Which channels the gym can actually send on. */
+  channels: { email: boolean; sms: boolean; whatsapp: boolean; push: boolean };
+  push_public_key: string;
+  push_devices: number;
 }

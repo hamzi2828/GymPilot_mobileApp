@@ -8,9 +8,12 @@
     "scheme": "gympilot",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "app.gympilot.member",
+      "supportsTablet": false,
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "app.gympilot.member",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -36,6 +39,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
     },
     "description": "Your gym in your pocket: book classes, check in, and manage your membership."
   }

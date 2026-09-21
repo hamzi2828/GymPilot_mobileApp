@@ -1,20 +1,23 @@
 // The member's own details: who the gym has them down as, the username they
-// sign in with, their gym's contact details and opening hours, and the two
-// things they can change -- their details and their password.
+// sign in with, their gym's contact details and opening hours, how they want
+// to hear from the gym, and the two things they can change -- their details
+// and their password.
 
 import React, { useEffect, useState } from "react";
-import { Linking, Pressable, View } from "react-native";
+import { Linking, Pressable, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
+import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
 import { Body, Button, Caption, Card, Divider, Field, Heading, Line, Loading, Notice, Pill, Title } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
+import { pushSupported } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 import { useLoad } from "@/lib/useLoad";
-import type { Profile as ProfileData } from "@/lib/types";
+import type { NotificationPreferences, NotificationSettings, Profile as ProfileData } from "@/lib/types";
 
 const MIN_PASSWORD = 8;
 
@@ -25,15 +28,24 @@ export default function Profile() {
 
   const profile = useLoad<{ data: ProfileData }>("/userDetailForProfile");
   const me = profile.data?.data;
+  const notifications = useLoad<{ data: NotificationSettings }>("/user/notification-preferences");
 
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // Shown inside the password card, next to the fields it is about.
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", goals: "" });
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
+
+  // The switches show what the server has, plus whatever the member has just
+  // flipped: an optimistic layer over the loaded values, put back if the
+  // save fails.
+  const [flipped, setFlipped] = useState<Partial<NotificationPreferences>>({});
+  const [savingPref, setSavingPref] = useState<keyof NotificationPreferences | null>(null);
 
   // Filled in when Edit is pressed rather than whenever the fetch lands, so a
   // refresh arriving mid-edit cannot wipe what has been typed.
@@ -81,16 +93,18 @@ export default function Profile() {
 
   const changePassword = async () => {
     if (passwords.newPassword.length < MIN_PASSWORD) {
-      setMessage({ tone: "error", text: `Your new password needs at least ${MIN_PASSWORD} characters.` });
+      setPasswordError(`Your new password needs at least ${MIN_PASSWORD} characters.`);
       return;
     }
     if (passwords.newPassword !== passwords.confirm) {
-      setMessage({ tone: "error", text: "The two new passwords do not match." });
+      setPasswordError("The two new passwords do not match.");
       return;
     }
     setBusy(true);
-    setMessage(null);
+    setPasswordError(null);
     try {
+      // A wrong current password comes back as a 401 with no session code,
+      // so it lands here as a message rather than signing the member out.
       await api<{ message?: string }>("/user/change-password", {
         method: "PUT",
         session,
@@ -101,9 +115,27 @@ export default function Profile() {
       await tellMember("Password changed", "Please sign in again with your new password.");
       await signOut();
     } catch (e) {
-      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not change your password." });
+      setPasswordError(e instanceof ApiError || e instanceof Error ? e.message : "Could not change your password.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const setPreference = async (key: keyof NotificationPreferences, value: boolean) => {
+    setFlipped((f) => ({ ...f, [key]: value }));
+    setSavingPref(key);
+    try {
+      await api<{ message?: string }>("/user/notification-preferences", {
+        method: "PUT",
+        session,
+        onUnauthorised: signOut,
+        body: { [key]: value },
+      });
+    } catch (e) {
+      setFlipped((f) => ({ ...f, [key]: !value }));
+      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not save that." });
+    } finally {
+      setSavingPref(null);
     }
   };
 
@@ -120,7 +152,33 @@ export default function Profile() {
 
   const username = me?.username || user?.username || "";
   const contact = branding?.contact;
+  const phone = branding?.phone || contact?.phone || "";
+  const email = branding?.supportEmail || contact?.email || "";
+  const siteUrl = branding?.siteUrl || "";
   const hours = branding?.openingHours || [];
+
+  const settings = notifications.data?.data;
+  const prefs: NotificationPreferences | null = settings ? { ...settings.preferences, ...flipped } : null;
+  const channels = settings?.channels;
+  const canPush = pushSupported();
+
+  const preferenceRow = (key: keyof NotificationPreferences, label: string, hint?: string) =>
+    prefs ? (
+      <View key={key} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6, gap: space.lg }}>
+        <View style={{ flex: 1 }}>
+          <Body style={{ fontSize: 14 }}>{label}</Body>
+          {hint ? <Caption>{hint}</Caption> : null}
+        </View>
+        <Switch
+          value={!!prefs[key]}
+          onValueChange={(v) => setPreference(key, v)}
+          disabled={savingPref === key}
+          trackColor={{ true: p.accent, false: p.border }}
+          thumbColor="#ffffff"
+          accessibilityLabel={label}
+        />
+      </View>
+    ) : null;
 
   return (
     <Screen refreshing={profile.refreshing} onRefresh={profile.reload}>
@@ -200,20 +258,38 @@ export default function Profile() {
         </Card>
       )}
 
+      {/* How they want to hear from the gym */}
+      <Card style={{ marginBottom: space.lg }}>
+        <Heading>Notifications</Heading>
+        {notifications.loading && !settings ? (
+          <Loading />
+        ) : notifications.error ? (
+          <Caption>{notifications.error}</Caption>
+        ) : (
+          <>
+            {preferenceRow("push", "On this phone", canPush ? undefined : "Needs the app from the store, on a real phone.")}
+            {preferenceRow("email", "By email")}
+            {channels?.sms ? preferenceRow("sms", "By text message") : null}
+            {channels?.whatsapp ? preferenceRow("whatsapp", "On WhatsApp") : null}
+            {preferenceRow("marketing", "Offers and news", "Bookings, payments and reminders always reach you.")}
+          </>
+        )}
+      </Card>
+
       {/* Where they train */}
       <Card style={{ marginBottom: space.lg }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.md }}>
           <Body style={{ fontWeight: "700", fontSize: 17 }}>Your gym</Body>
           <GymMark size={28} />
         </View>
-        {contact?.phone ? (
-          <Pressable onPress={() => Linking.openURL(`tel:${contact.phone}`)}>
-            <Line label="Phone" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{contact.phone}</Body>} />
+        {phone ? (
+          <Pressable onPress={() => Linking.openURL(`tel:${phone}`)}>
+            <Line label="Phone" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{phone}</Body>} />
           </Pressable>
         ) : null}
-        {contact?.email ? (
-          <Pressable onPress={() => Linking.openURL(`mailto:${contact.email}`)}>
-            <Line label="Email" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{contact.email}</Body>} />
+        {email ? (
+          <Pressable onPress={() => Linking.openURL(`mailto:${email}`)}>
+            <Line label="Email" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{email}</Body>} />
           </Pressable>
         ) : null}
         {contact?.address ? <Line label="Address" value={contact.address} /> : null}
@@ -221,6 +297,14 @@ export default function Profile() {
           <Pressable onPress={() => Linking.openURL(`https://wa.me/${branding.whatsapp.replace(/[^0-9]/g, "")}`)}>
             <Line label="WhatsApp" value={<Body style={{ color: p.accent, fontWeight: "600" }}>Message the gym</Body>} />
           </Pressable>
+        ) : null}
+        {siteUrl ? (
+          <Pressable onPress={() => WebBrowser.openBrowserAsync(siteUrl)}>
+            <Line label="Website" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{siteUrl.replace(/^https?:\/\//, "")}</Body>} />
+          </Pressable>
+        ) : null}
+        {!phone && !email && !contact?.address && !branding?.whatsapp && !siteUrl ? (
+          <Caption>Your gym has not added its contact details yet.</Caption>
         ) : null}
 
         {hours.length > 0 ? (
@@ -249,6 +333,13 @@ export default function Profile() {
           </Card>
         </Pressable>
 
+        <Pressable onPress={() => router.push("/bookings")} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+          <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Body style={{ fontWeight: "600" }}>Your past bookings</Body>
+            <Body style={{ color: p.textFaint }}>›</Body>
+          </Card>
+        </Pressable>
+
         <Pressable onPress={() => router.push("/checkin")} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
           <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Body style={{ fontWeight: "600" }}>Your check-in code</Body>
@@ -259,6 +350,7 @@ export default function Profile() {
         {changingPassword ? (
           <Card>
             <Heading>Change your password</Heading>
+            {passwordError ? <Notice tone="error">{passwordError}</Notice> : null}
             <Field
               label="Current password"
               value={passwords.currentPassword}
@@ -282,7 +374,15 @@ export default function Profile() {
               autoCapitalize="none"
             />
             <Button label="Change password" onPress={changePassword} busy={busy} />
-            <Button label="Cancel" variant="quiet" onPress={() => setChangingPassword(false)} style={{ marginTop: space.sm }} />
+            <Button
+              label="Cancel"
+              variant="quiet"
+              onPress={() => {
+                setChangingPassword(false);
+                setPasswordError(null);
+              }}
+              style={{ marginTop: space.sm }}
+            />
           </Card>
         ) : (
           <Pressable onPress={() => setChangingPassword(true)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>

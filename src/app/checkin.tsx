@@ -16,6 +16,7 @@ import { api, ApiError } from "@/lib/api";
 import { timeLeft } from "@/lib/format";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
+import { useRequireSession } from "@/lib/useRequireSession";
 import type { CheckInCode } from "@/lib/types";
 
 /** Swap in a new code once this one has under a minute left. */
@@ -24,7 +25,8 @@ const REFRESH_UNDER_MS = 60_000;
 const CHECK_EVERY_MS = 30_000;
 
 export default function CheckIn() {
-  const { session, signOut, gymName } = useSession();
+  const { session } = useRequireSession();
+  const { signOut, gymName } = useSession();
   const p = usePalette();
   const router = useRouter();
 
@@ -35,7 +37,9 @@ export default function CheckIn() {
   const fetching = useRef(false);
 
   const load = useCallback(async () => {
-    if (fetching.current) return;
+    // Signed out under us: nothing to ask for, and the screen is on its way
+    // to the sign-in page anyway.
+    if (!session || fetching.current) return;
     fetching.current = true;
     try {
       const res = await api<{ data: CheckInCode }>("/api/attendance/me/qr", { session, onUnauthorised: signOut });
@@ -58,9 +62,10 @@ export default function CheckIn() {
   );
 
   // One ticker, doing both jobs: what the member is told, and asking for a
-  // new code before this one dies under them.
+  // new code before this one dies under them. It stops with the session:
+  // a phone that has been signed out must not keep asking for codes.
   useEffect(() => {
-    if (!code?.expires_at) return;
+    if (!session || !code?.expires_at) return;
     const tick = () => {
       setValidFor(timeLeft(code.expires_at));
       if (new Date(code.expires_at).getTime() - Date.now() <= REFRESH_UNDER_MS) load();
@@ -68,7 +73,7 @@ export default function CheckIn() {
     tick();
     const timer = setInterval(tick, CHECK_EVERY_MS);
     return () => clearInterval(timer);
-  }, [code, load]);
+  }, [code, load, session]);
 
   const expired = !validFor;
 

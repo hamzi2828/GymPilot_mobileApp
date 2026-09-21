@@ -21,9 +21,11 @@ function Navigator() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="forgot" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="checkin" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="attendance" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="bookings" options={{ animation: "slide_from_right" }} />
       </Stack>
     </>
   );

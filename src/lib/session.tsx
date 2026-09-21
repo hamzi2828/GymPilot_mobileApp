@@ -4,11 +4,12 @@
 // token without its gym slug is useless, and the branding is what stops the
 // app looking like a generic app the moment it opens.
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, login as loginRequest, type Session } from "./api";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { api, login as loginRequest, loginTwoFactor as twoFactorRequest, type Session } from "./api";
+import { registerForPush, unregisterPush } from "./push";
 import { getItem, removeItem, setItem } from "./storage";
 import { paletteFrom, type Palette } from "./theme";
-import type { Branding, Member } from "./types";
+import type { Branding, LoginResponse, Member } from "./types";
 
 // Kept as two records rather than one. Secure Store is a keychain, not a
 // database: Android warns above 2048 bytes per value and can refuse to write
@@ -26,16 +27,30 @@ interface Stored {
   branding: Branding | null;
 }
 
+export interface SignInResult {
+  /** The account signs in with an emailed code; finish with completeTwoFactor. */
+  requires2fa?: boolean;
+  challengeId?: string;
+  gymSlug?: string;
+  message?: string;
+}
+
 interface SessionValue {
-  /** null while the stored session is still being read. */
+  /** false while the stored session is still being read. */
   ready: boolean;
   session: Session | null;
   user: Member | null;
   gymName: string;
   branding: Branding | null;
   palette: Palette;
-  signIn: (username: string, password: string) => Promise<{ requires2fa?: boolean; message?: string }>;
-  signOut: () => Promise<void>;
+  /**
+   * Why the last session ended, in the server's words, for the sign-in
+   * screen to show. null after a sign-out the member asked for.
+   */
+  signOutReason: string | null;
+  signIn: (username: string, password: string) => Promise<SignInResult>;
+  completeTwoFactor: (challengeId: string, code: string, gymSlug: string) => Promise<void>;
+  signOut: (reason?: string) => Promise<void>;
   /** Re-read the member and the gym's branding, e.g. after a colour change. */
   refresh: () => Promise<void>;
 }
@@ -45,6 +60,13 @@ const SessionContext = createContext<SessionValue | null>(null);
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [stored, setStored] = useState<Stored | null>(null);
+  const [signOutReason, setSignOutReason] = useState<string | null>(null);
+
+  // The latest session, readable from callbacks that must stay stable.
+  const storedRef = useRef<Stored | null>(null);
+  useEffect(() => {
+    storedRef.current = stored;
+  }, [stored]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,19 +115,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
-  const signOut = useCallback(async () => {
-    await persist(null);
-  }, [persist]);
+  const signOut = useCallback<SessionValue["signOut"]>(
+    async (reason) => {
+      // Take the phone off the gym's notification list first, while the
+      // token is still to hand. Not awaited: a sign-out must not wait on
+      // the network, and if the token is already dead this simply fails.
+      const before = storedRef.current;
+      if (before) void unregisterPush({ token: before.token, gymSlug: before.gymSlug });
+      setSignOutReason(reason || null);
+      await persist(null);
+    },
+    [persist]
+  );
 
-  const signIn = useCallback<SessionValue["signIn"]>(
-    async (username, password) => {
-      const result = await loginRequest(username, password);
-      if (result.requires2fa) {
-        return { requires2fa: true, message: result.message };
-      }
+  // A successful sign-in, whichever route produced it.
+  const adopt = useCallback(
+    async (result: LoginResponse) => {
       if (!result.token || !result.user || !result.gym) {
         throw new Error(result.message || "Could not sign you in.");
       }
+      setSignOutReason(null);
       await persist({
         token: result.token,
         gymSlug: result.gym.slug,
@@ -113,15 +142,41 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         user: result.user,
         branding: result.branding || null,
       });
-      return {};
     },
     [persist]
   );
 
-  const session = useMemo<Session | null>(
-    () => (stored ? { token: stored.token, gymSlug: stored.gymSlug } : null),
-    [stored]
+  const signIn = useCallback<SessionValue["signIn"]>(
+    async (username, password) => {
+      const result = await loginRequest(username, password);
+      if (result.requires2fa) {
+        return { requires2fa: true, challengeId: result.challengeId, gymSlug: result.gym?.slug, message: result.message };
+      }
+      await adopt(result);
+      return {};
+    },
+    [adopt]
   );
+
+  const completeTwoFactor = useCallback<SessionValue["completeTwoFactor"]>(
+    async (challengeId, code, gymSlug) => {
+      await adopt(await twoFactorRequest(challengeId, code, gymSlug));
+    },
+    [adopt]
+  );
+
+  // Only the token and the slug: a branding refresh must not look like a
+  // new session to every screen holding this.
+  const token = stored?.token ?? null;
+  const gymSlug = stored?.gymSlug ?? null;
+  const session = useMemo<Session | null>(() => (token && gymSlug ? { token, gymSlug } : null), [token, gymSlug]);
+
+  // Once there is a session -- restored on launch, or just signed in -- tell
+  // the gym how to reach this phone. Nothing to show if it cannot be done.
+  useEffect(() => {
+    if (!session) return;
+    registerForPush(session).catch(() => {});
+  }, [session]);
 
   const refresh = useCallback(async () => {
     if (!stored) return;
@@ -142,11 +197,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       gymName: stored?.gymName || "",
       branding: stored?.branding || null,
       palette: paletteFrom(stored?.branding?.themeTokens),
+      signOutReason,
       signIn,
+      completeTwoFactor,
       signOut,
       refresh,
     }),
-    [ready, session, stored, signIn, signOut, refresh]
+    [ready, session, stored, signOutReason, signIn, completeTwoFactor, signOut, refresh]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
