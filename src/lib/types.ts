@@ -128,7 +128,8 @@ export interface Session {
   instructor_name: string;
   room: string;
   capacity: number;
-  duration_minutes: number;
+  /** null when the gym never set one on the class. */
+  duration_minutes: number | null;
   difficulty: string;
   starts_at: string;
   is_cancelled: boolean;

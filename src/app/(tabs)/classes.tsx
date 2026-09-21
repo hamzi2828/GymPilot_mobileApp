@@ -104,7 +104,7 @@ export default function Classes() {
     const sure = await confirmAction({
       title: late ? "Cancel late?" : "Cancel this booking?",
       message: late
-        ? `${when} starts in under ${cancelWindow} hours. Your gym counts this as a late cancellation${rules?.use_credits ? ", so the session credit may not come back" : ""}.`
+        ? `${when} ${hoursLeft <= 0 ? "has already started" : `starts in under ${cancelWindow} hours`}. Your gym counts this as a late cancellation${rules?.use_credits ? ", so the session credit may not come back" : ""}.`
         : `${when}.`,
       confirm: late ? "Cancel anyway" : "Cancel booking",
       cancel: "Keep it",
@@ -188,7 +188,10 @@ export default function Classes() {
                 const booked = !!s.my_booking && s.my_booking.status !== "cancelled";
                 const waitlisted = s.my_booking?.status === "waitlisted";
                 const busy = busyKey === keyOf(s);
-                const actionable = booked ? !s.is_closed : s.can_book;
+                // The booking cutoff closes booking, not cancelling: the
+                // server takes a cancel at any time (inside the gym's window
+                // it counts as a late one, which the confirm says first).
+                const actionable = booked || s.can_book;
 
                 return (
                   <Pressable
@@ -201,7 +204,7 @@ export default function Classes() {
                       <View style={{ flexDirection: "row", alignItems: "center", gap: space.lg }}>
                         <View style={{ minWidth: 52 }}>
                           <Body style={{ fontWeight: "800", fontSize: 15 }}>{s.start_time}</Body>
-                          <Caption>{s.duration_minutes} min</Caption>
+                          {s.duration_minutes ? <Caption>{s.duration_minutes} min</Caption> : null}
                         </View>
                         <View style={{ flex: 1 }}>
                           <Body style={{ fontWeight: "700" }}>{s.class_name}</Body>
