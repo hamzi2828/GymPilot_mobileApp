@@ -7,21 +7,15 @@ import { useFocusEffect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
-import { Body, Button, Caption, Card, Divider, Empty, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
+import { Body, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
 import { dayLabel, longDate, relativeDays, timeRange } from "@/lib/format";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
-import { useLoad } from "@/lib/useLoad";
+import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { Announcement, AttendanceSummary, MembershipOrder, TimetableResponse } from "@/lib/types";
 
-// The server's names for "the whole gym is closed to its members right now":
-// suspended by the platform, its GymPilot subscription lapsed, or the member
-// app switched off for it. Every request fails the same way, so the screen
-// says it once, with a way out, rather than three times.
-const GYM_CLOSED = new Set(["TENANT_SUSPENDED", "SUBSCRIPTION_INACTIVE", "MEMBER_APP_NOT_INCLUDED"]);
-
 export default function Home() {
-  const { user, gymName, branding, signOut } = useSession();
+  const { user, gymName, branding } = useSession();
   const p = usePalette();
   const router = useRouter();
 
@@ -30,9 +24,9 @@ export default function Home() {
   const timetable = useLoad<TimetableResponse>("/api/gymfolio/timetable");
   const announcements = useLoad<{ data: Announcement[] }>("/announcements/active");
 
-  const closed = [memberships, timetable, attendance].find(
-    (load) => load.errorStatus === 402 || (!!load.errorCode && GYM_CLOSED.has(load.errorCode))
-  );
+  // A gym closed to its members fails every request the same way: say it
+  // once, with a way out, rather than under every section.
+  const closed = useGymClosed(memberships, timetable, attendance);
 
   const active = (memberships.data?.data || []).find((o) => o.status === "active") || (memberships.data?.data || [])[0] || null;
   // The clock, read when the screen opens rather than on every render.
@@ -74,14 +68,8 @@ export default function Home() {
         <GymMark />
       </View>
 
-      {closed ? (
-        <>
-          <Notice tone="warn">{closed.error}</Notice>
-          <Body muted style={{ marginBottom: space.lg }}>
-            This is between your gym and GymPilot, not something you need to fix. Once it is sorted out, sign in again and everything will be back.
-          </Body>
-          <Button label="Sign out" variant="secondary" onPress={() => signOut()} />
-        </>
+      {closed.message ? (
+        <GymClosed message={closed.message} />
       ) : (
         <>
           {/* What the gym has to say. */}

@@ -8,7 +8,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import { api, ApiError } from "./api";
+import { api, ApiError, isGymClosed } from "./api";
 import { useSession } from "./session";
 
 export function useLoad<T>(path: string | null, deps: unknown[] = []) {
@@ -67,5 +67,38 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
     }, [run])
   );
 
-  return { data, error, errorCode, errorStatus, loading, refreshing, reload: () => run(true) };
+  return {
+    data,
+    error,
+    errorCode,
+    errorStatus,
+    /** The gym as a whole is closed to its members; see useGymClosed. */
+    closed: isGymClosed(errorStatus, errorCode),
+    loading,
+    refreshing,
+    reload: () => run(true),
+  };
+}
+
+/**
+ * "Your gym is closed to its members right now" -- suspended, its GymPilot
+ * subscription lapsed, or the member app switched off for it. Every request
+ * fails the same way then, so a screen shows one notice (<GymClosed />) in
+ * place of an error under every section.
+ *
+ * Pass the screen's loads. `caught` is for the errors the screen's own
+ * buttons get back: it returns true when it took one, and the screen then
+ * shows the notice instead of the error. `clear` goes in pull-to-refresh, so
+ * a gym that is open again gets its screen back.
+ */
+export function useGymClosed(...loads: { closed: boolean; error: string | null }[]) {
+  const [fromAction, setFromAction] = useState<string | null>(null);
+  const load = loads.find((l) => l.closed);
+  const caught = useCallback((e: unknown) => {
+    if (!(e instanceof ApiError) || !isGymClosed(e.status, e.code)) return false;
+    setFromAction(e.message);
+    return true;
+  }, []);
+  const clear = useCallback(() => setFromAction(null), []);
+  return { message: (load && load.error) || fromAction, caught, clear };
 }

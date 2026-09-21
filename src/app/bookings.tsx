@@ -6,10 +6,10 @@ import React, { useMemo } from "react";
 import { View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Empty, Loading, Notice, Pill, Stat } from "@/components/ui";
+import { Body, Button, Caption, Card, Empty, GymClosed, Loading, Notice, Pill, Stat } from "@/components/ui";
 import { dayLabel, timeRange } from "@/lib/format";
 import { space } from "@/lib/theme";
-import { useLoad } from "@/lib/useLoad";
+import { useGymClosed, useLoad } from "@/lib/useLoad";
 import { useRequireSession } from "@/lib/useRequireSession";
 import type { BookingRecord, BookingsResponse } from "@/lib/types";
 
@@ -39,6 +39,7 @@ export default function Bookings() {
   // Past only: what is still to come lives on the Classes tab.
   const history = useLoad<BookingsResponse>("/api/gymfolio/bookings/me?scope=past");
   const rows = useMemo(() => history.data?.data || [], [history.data]);
+  const closed = useGymClosed(history);
 
   const attended = rows.filter((b) => b.status === "attended").length;
   const missed = rows.filter((b) => b.status === "no_show").length;
@@ -46,9 +47,9 @@ export default function Bookings() {
 
   return (
     <Screen title="Your bookings" subtitle="Classes you booked before today" refreshing={history.refreshing} onRefresh={history.reload}>
-      {history.error ? <Notice tone="error">{history.error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} /> : history.error ? <Notice tone="error">{history.error}</Notice> : null}
 
-      {history.loading && !history.data ? (
+      {closed.message ? null : history.loading && !history.data ? (
         <Loading />
       ) : rows.length === 0 ? (
         <Empty title="No past bookings" hint="Once you have been to a class, it shows up here." />

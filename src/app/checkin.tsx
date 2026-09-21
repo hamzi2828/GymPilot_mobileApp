@@ -11,11 +11,12 @@ import { Pressable, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import { GymMark, Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Loading, Notice, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, GymClosed, Loading, Notice, Title } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { timeLeft } from "@/lib/format";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
+import { useGymClosed } from "@/lib/useLoad";
 import { useRequireSession } from "@/lib/useRequireSession";
 import type { CheckInCode } from "@/lib/types";
 
@@ -35,6 +36,8 @@ export default function CheckIn() {
   const [loading, setLoading] = useState(true);
   const [validFor, setValidFor] = useState("");
   const fetching = useRef(false);
+  const closed = useGymClosed();
+  const { caught, clear } = closed;
 
   const load = useCallback(async () => {
     // Signed out under us: nothing to ask for, and the screen is on its way
@@ -45,13 +48,16 @@ export default function CheckIn() {
       const res = await api<{ data: CheckInCode }>("/api/attendance/me/qr", { session, onUnauthorised: signOut });
       setCode(res.data);
       setError(null);
+      clear();
     } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not get your check-in code.");
+      // A gym closed to its members gets the one notice, and no code.
+      if (caught(e)) setCode(null);
+      else setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not get your check-in code.");
     } finally {
       setLoading(false);
       fetching.current = false;
     }
-  }, [session, signOut]);
+  }, [session, signOut, caught, clear]);
 
   // On focus rather than on mount: a member who backs out and comes straight
   // back gets a live code, not the expired one they left behind.
@@ -87,9 +93,9 @@ export default function CheckIn() {
         <GymMark />
       </View>
 
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} /> : error ? <Notice tone="error">{error}</Notice> : null}
 
-      {loading && !code ? (
+      {closed.message ? null : loading && !code ? (
         <Loading label="Getting your code" />
       ) : !code ? (
         <Button label="Try again" onPress={load} />

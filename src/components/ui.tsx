@@ -3,7 +3,7 @@
 
 import React from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
-import { usePalette } from "@/lib/session";
+import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 
 export function Title({ children, style }: { children: React.ReactNode; style?: object }) {
@@ -172,6 +172,23 @@ export function Notice({ tone, children }: { tone: "error" | "ok" | "warn"; chil
     <View style={{ backgroundColor: `${colour}22`, borderRadius: radius.md, padding: space.md, marginBottom: space.lg }}>
       <Text style={{ color: colour, fontSize: 14, lineHeight: 20 }}>{children}</Text>
     </View>
+  );
+}
+
+/**
+ * The whole gym is closed to its members right now (see useGymClosed): said
+ * once, in place of the screen, with a way out. The reason is the server's.
+ */
+export function GymClosed({ message }: { message: string }) {
+  const { signOut } = useSession();
+  return (
+    <>
+      <Notice tone="warn">{message}</Notice>
+      <Body muted style={{ marginBottom: space.lg }}>
+        This is between your gym and GymPilot, not something you need to fix. Once it is sorted out, pull down to refresh and everything will be back.
+      </Body>
+      <Button label="Sign out" variant="secondary" onPress={() => signOut()} />
+    </>
   );
 }
 

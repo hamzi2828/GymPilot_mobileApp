@@ -8,13 +8,13 @@ import React, { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Caption, Card, Empty, Loading, Notice, Pill } from "@/components/ui";
+import { Body, Caption, Card, Empty, GymClosed, Loading, Notice, Pill } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction } from "@/lib/confirm";
 import { dayLabel, timeRange } from "@/lib/format";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
-import { useLoad } from "@/lib/useLoad";
+import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { Session, TimetableResponse } from "@/lib/types";
 
 /** Hours from now until a session starts. Read from the clock only when a member acts, never while drawing. */
@@ -32,6 +32,13 @@ export default function Classes() {
 
   const timetable = useLoad<TimetableResponse>("/api/gymfolio/timetable");
   const sessions = useMemo(() => timetable.data?.data || [], [timetable.data]);
+  // The timetable is public, so a closed gym usually shows up only when a
+  // member tries to book or cancel.
+  const closed = useGymClosed(timetable);
+  const reload = () => {
+    closed.clear();
+    timetable.reload();
+  };
 
   const visible = useMemo(
     () => (onlyMine ? sessions.filter((s) => s.my_booking && s.my_booking.status !== "cancelled") : sessions),
@@ -78,6 +85,7 @@ export default function Classes() {
       });
       timetable.reload();
     } catch (e) {
+      if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not book that class." });
     } finally {
       setBusyKey(null);
@@ -115,18 +123,27 @@ export default function Classes() {
       setMessage({ tone: "ok", text: res.message || "Booking cancelled." });
       timetable.reload();
     } catch (e) {
+      if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not cancel that booking." });
     } finally {
       setBusyKey(null);
     }
   };
 
+  if (closed.message) {
+    return (
+      <Screen title="Classes" refreshing={timetable.refreshing} onRefresh={reload}>
+        <GymClosed message={closed.message} />
+      </Screen>
+    );
+  }
+
   return (
     <Screen
       title="Classes"
       subtitle={rules ? `Book up to ${rules.horizon_days} days ahead · cancel at least ${rules.cancel_hours}h before` : undefined}
       refreshing={timetable.refreshing}
-      onRefresh={timetable.reload}
+      onRefresh={reload}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.lg }}>
         {[

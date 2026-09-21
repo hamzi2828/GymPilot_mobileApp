@@ -7,10 +7,10 @@ import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Empty, Heading, Line, Loading, Notice, Pill, Stat } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat } from "@/components/ui";
 import { usePalette } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
-import { useLoad } from "@/lib/useLoad";
+import { useGymClosed, useLoad } from "@/lib/useLoad";
 import { useRequireSession } from "@/lib/useRequireSession";
 import type { AttendanceResponse } from "@/lib/types";
 
@@ -31,12 +31,13 @@ export default function Attendance() {
   const summary = data?.summary;
   const months = data?.months || [];
   const visits = data?.visits || [];
+  const closed = useGymClosed(attendance);
 
   return (
     <Screen title="Your visits" refreshing={attendance.refreshing} onRefresh={attendance.reload}>
-      {attendance.error ? <Notice tone="error">{attendance.error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} /> : attendance.error ? <Notice tone="error">{attendance.error}</Notice> : null}
 
-      {attendance.loading && !data ? (
+      {closed.message ? null : attendance.loading && !data ? (
         <Loading />
       ) : (
         <>

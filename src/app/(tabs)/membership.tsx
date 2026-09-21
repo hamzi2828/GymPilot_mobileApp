@@ -19,13 +19,13 @@ import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Empty, Heading, Line, Loading, Notice, Pill } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction } from "@/lib/confirm";
 import { longDate, money, relativeDays } from "@/lib/format";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
-import { useLoad } from "@/lib/useLoad";
+import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { MembershipOrder, PackageOnSale } from "@/lib/types";
 
 interface Rules {
@@ -51,6 +51,13 @@ export default function Membership() {
   const orders = useLoad<{ data: MembershipOrder[] }>("/api/gymfolio/package-orders/me?limit=20");
   const rules = useLoad<{ data: Rules }>("/api/gymfolio/membership/rules");
   const onSale = useLoad<{ data: PackageOnSale[] }>("/api/gymfolio/packages/active");
+  const closed = useGymClosed(orders, rules);
+  const reload = () => {
+    closed.clear();
+    orders.reload();
+    rules.reload();
+    onSale.reload();
+  };
 
   const list = orders.data?.data || [];
   const current = list.find((o) => LIVE.includes(o.status)) || list[0] || null;
@@ -84,6 +91,7 @@ export default function Membership() {
       setMessage({ tone: "ok", text: res.message || "Done." });
       orders.reload();
     } catch (e) {
+      if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "That did not work." });
     } finally {
       setBusy(null);
@@ -113,8 +121,16 @@ export default function Membership() {
       </Pressable>
     ) : null;
 
+  if (closed.message) {
+    return (
+      <Screen title="Membership" refreshing={orders.refreshing} onRefresh={reload}>
+        <GymClosed message={closed.message} />
+      </Screen>
+    );
+  }
+
   return (
-    <Screen title="Membership" refreshing={orders.refreshing} onRefresh={orders.reload}>
+    <Screen title="Membership" refreshing={orders.refreshing} onRefresh={reload}>
       {message ? <Notice tone={message.tone === "ok" ? "ok" : "error"}>{message.text}</Notice> : null}
       {orders.error ? <Notice tone="error">{orders.error}</Notice> : null}
 
