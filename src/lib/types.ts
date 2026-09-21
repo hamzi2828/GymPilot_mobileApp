@@ -228,7 +228,7 @@ export interface PackageOnSale {
   supportingText?: string;
 }
 
-/** GET /api/userDetailForProfile → data */
+/** GET /userDetailForProfile → data (and PUT /update/user → data) */
 export interface Profile {
   _id: string;
   username?: string;
@@ -243,6 +243,7 @@ export interface Profile {
   goals?: string;
   emergencyContact?: { name?: string; phone?: string; relationship?: string };
   addresses?: { _id?: string; address?: string; city?: string; state?: string; postalCode?: string; country?: string }[];
+  employment?: { isStaff?: boolean };
   createdAt?: string;
 }
 

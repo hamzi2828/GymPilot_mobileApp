@@ -2,13 +2,18 @@ import React from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { SessionProvider, usePalette } from "@/lib/session";
+import { useNotificationTaps } from "@/lib/push";
+import { SessionProvider, usePalette, useSession } from "@/lib/session";
 
 // Screens paint their own background, so the stack's is only ever seen for a
 // frame — but on the gym's colour rather than white, so that frame does not
 // flash.
 function Navigator() {
   const p = usePalette();
+  const { ready, session } = useSession();
+  // A tapped notification opens the screen it is about. Here because this is
+  // the one component that is always mounted and can navigate.
+  useNotificationTaps(ready, !!session);
   return (
     <>
       <StatusBar style="light" />
