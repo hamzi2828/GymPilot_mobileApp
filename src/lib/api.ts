@@ -11,10 +11,17 @@ import type { LoginResponse } from "./types";
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  /**
+   * The server's technical reason, when it sent one beside `message` (in
+   * `error`) -- e.g. which unique field a save collided with. For the app
+   * to translate, never to show as it is.
+   */
+  detail?: string;
+  constructor(message: string, status: number, code?: string, detail?: string) {
     super(message);
     this.status = status;
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -116,7 +123,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 
   if (!response.ok) {
     const message = typeof payload.message === "string" ? payload.message : `Something went wrong (${response.status}).`;
-    throw new ApiError(message, response.status, typeof payload.code === "string" ? payload.code : undefined);
+    throw new ApiError(
+      message,
+      response.status,
+      typeof payload.code === "string" ? payload.code : undefined,
+      typeof payload.error === "string" ? payload.error : undefined
+    );
   }
 
   return payload as T;

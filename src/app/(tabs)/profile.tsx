@@ -1,7 +1,8 @@
 // The member's own details: who the gym has them down as, the username they
 // sign in with, their gym's contact details and opening hours, how they want
 // to hear from the gym, and the two things they can change -- their details
-// and their password.
+// and their password. And the way out for good: deleting the account, which
+// the app stores require of an app with sign-in.
 
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, Switch, View } from "react-native";
@@ -9,30 +10,54 @@ import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Field, Heading, Line, Loading, Notice, Pill, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, Line, Loading, Notice, Pill, Title } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
 import { pushSupported } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
-import { useLoad } from "@/lib/useLoad";
+import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { NotificationPreferences, NotificationSettings, Profile as ProfileData } from "@/lib/types";
 
 const MIN_PASSWORD = 8;
 
+/**
+ * Why a profile save failed, in words a member can act on. The server's
+ * message is a generic "Error updating user"; the reason is in its `error`
+ * -- a database duplicate or validation text, not for showing as it is.
+ */
+function saveProblem(e: unknown): string {
+  if (!(e instanceof ApiError)) return e instanceof Error ? e.message : "Could not save your details.";
+  const detail = e.detail || "";
+  if (/E11000|duplicate key/i.test(detail)) {
+    return /email/i.test(detail)
+      ? "That email address is already used by another account at your gym."
+      : "Some of those details are already used by another account at your gym.";
+  }
+  if (/validation failed|cast to/i.test(detail)) return "Some of those details are not valid. Please check them and try again.";
+  return e.message;
+}
+
 export default function Profile() {
-  const { session, user, gymName, branding, signOut, refresh } = useSession();
+  const { session, user, gymName, branding, signOut, refresh, updateUser } = useSession();
   const p = usePalette();
   const router = useRouter();
 
   const profile = useLoad<{ data: ProfileData }>("/userDetailForProfile");
   const me = profile.data?.data;
   const notifications = useLoad<{ data: NotificationSettings }>("/user/notification-preferences");
+  const closed = useGymClosed(profile, notifications);
+  const reload = () => {
+    closed.clear();
+    profile.reload();
+    notifications.reload();
+  };
 
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   // Shown inside the password card, next to the fields it is about.
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -61,8 +86,9 @@ export default function Profile() {
     setEditing(true);
   };
 
-  // The gym's colours can change under the member's feet; pick them up when
-  // they open their profile rather than making them sign in again.
+  // The gym's colours -- and the member's own record, which the front desk
+  // can change -- can move under the member's feet; pick them up when they
+  // open their profile rather than making them sign in again.
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,15 +103,34 @@ export default function Profile() {
   };
 
   const save = async () => {
+    const body = {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      goals: form.goals.trim(),
+    };
+    // What the server would refuse anyway, said before the round trip.
+    if (!body.firstName || !body.lastName) {
+      setMessage({ tone: "error", text: "Your first and last name cannot be empty." });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+      setMessage({ tone: "error", text: "That does not look like an email address." });
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
-      await api<{ message?: string }>("/update/user", { method: "PUT", session, onUnauthorised: signOut, body: form });
+      const res = await api<{ message?: string; data?: ProfileData }>("/update/user", { method: "PUT", session, onUnauthorised: signOut, body });
+      // Home greets the member by name: it should be the new one straight away.
+      if (res.data) await updateUser(res.data);
       setMessage({ tone: "ok", text: "Your details have been saved." });
       setEditing(false);
       profile.reload();
     } catch (e) {
-      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not save your details." });
+      if (closed.caught(e)) return;
+      setMessage({ tone: "error", text: saveProblem(e) });
     } finally {
       setBusy(false);
     }
@@ -111,10 +156,14 @@ export default function Profile() {
         onUnauthorised: signOut,
         body: { currentPassword: passwords.currentPassword, newPassword: passwords.newPassword },
       });
-      // Changing the password ends every session, this one included.
-      await tellMember("Password changed", "Please sign in again with your new password.");
+      // Changing the password ended every session, this one included. Sign
+      // out now -- which takes the phone off the gym's notification list
+      // first -- and then say why, rather than leave a dead session behind
+      // the dialog.
       await signOut();
+      await tellMember("Password changed", "Please sign in again with your new password.");
     } catch (e) {
+      if (closed.caught(e)) return;
       setPasswordError(e instanceof ApiError || e instanceof Error ? e.message : "Could not change your password.");
     } finally {
       setBusy(false);
@@ -133,6 +182,7 @@ export default function Profile() {
       });
     } catch (e) {
       setFlipped((f) => ({ ...f, [key]: !value }));
+      if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not save that." });
     } finally {
       setSavingPref(null);
@@ -148,6 +198,37 @@ export default function Profile() {
       destructive: true,
     });
     if (sure) await signOut();
+  };
+
+  // Deleting the account is final: the server removes it and releases the
+  // username, so there is nothing to sign back in to. A membership is a
+  // separate thing the gym bills for, and deleting the account does not stop
+  // it -- the member is told so before they confirm.
+  const deleteAccount = async () => {
+    const sure = await confirmAction({
+      title: "Delete your account?",
+      message:
+        `This permanently deletes your account at ${gymName || "your gym"} and your sign-in username. It cannot be undone.\n\n` +
+        "It does not cancel a membership that renews automatically: cancel that first on the Membership tab, or ask your gym.",
+      confirm: "Delete my account",
+      cancel: "Keep my account",
+      destructive: true,
+    });
+    if (!sure) return;
+    setDeleting(true);
+    setMessage(null);
+    try {
+      await api<{ message?: string }>("/user", { method: "DELETE", session, onUnauthorised: signOut });
+      // The account is gone, and this session with it. Sign-out takes the
+      // phone off the gym's notification list before it clears anything.
+      await signOut();
+      await tellMember("Account deleted", "Your account has been deleted.");
+    } catch (e) {
+      if (closed.caught(e)) return;
+      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not delete your account." });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const username = me?.username || user?.username || "";
@@ -180,8 +261,16 @@ export default function Profile() {
       </View>
     ) : null;
 
+  if (closed.message) {
+    return (
+      <Screen title="Profile" refreshing={profile.refreshing} onRefresh={reload}>
+        <GymClosed message={closed.message} />
+      </Screen>
+    );
+  }
+
   return (
-    <Screen refreshing={profile.refreshing} onRefresh={profile.reload}>
+    <Screen refreshing={profile.refreshing} onRefresh={reload}>
       {/* Who they are */}
       <View style={{ alignItems: "center", marginBottom: space.xl }}>
         <View
@@ -394,6 +483,7 @@ export default function Profile() {
         )}
 
         <Button label="Sign out" variant="danger" onPress={confirmSignOut} style={{ marginTop: space.md }} />
+        <Button label="Delete my account" variant="quiet" onPress={deleteAccount} busy={deleting} disabled={busy} />
 
         <View style={{ alignItems: "center", marginTop: space.lg, gap: 2 }}>
           <Caption style={{ fontSize: 11 }}>{branding?.siteName || gymName}</Caption>
