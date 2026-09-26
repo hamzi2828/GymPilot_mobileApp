@@ -40,11 +40,12 @@
     "experiments": {
       "typedRoutes": true
     },
+    "description": "Your gym in your pocket: book classes, check in, and manage your membership.",
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "df8c79de-a02b-440c-bcdb-1b3113261c3c"
       }
     },
-    "description": "Your gym in your pocket: book classes, check in, and manage your membership."
+    "owner": "hamzahashmi640"
   }
 }

@@ -196,9 +196,11 @@ message rather than a spinner for good.
 
 The identifiers are set: `app.gympilot.member` for both the iOS bundle id and
 the Android package, phones only on iOS. `eas.json` carries three profiles —
-`development` (dev client, internal), `preview` (internal) and `production`
-(auto-incremented build numbers) — each with its own `EXPO_PUBLIC_API_URL`.
-The addresses in the file are placeholders; nothing below invents real ones.
+`development` (dev client, internal), `preview` (internal, an installable APK
+on Android) and `production` (auto-incremented build numbers) — each with its
+own `EXPO_PUBLIC_API_URL`. `preview` and `production` point at the live API,
+`https://gympilot-backend.vercel.app`. The app is linked to the EAS project
+`@hamzahashmi640/gympilot`, so steps 2 and 3 are done for this app.
 
 1. `npm install -g eas-cli && eas login`
 2. **Server address.** In `eas.json`, set `build.preview.env.EXPO_PUBLIC_API_URL`
