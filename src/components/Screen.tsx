@@ -1,8 +1,8 @@
-// Every screen sits on the gym's own background, inside the safe area, and
-// pulls to refresh.
+// Every screen sits on the gym's own background, inside the safe area, pulls
+// to refresh, and keeps the field being typed in clear of the keyboard.
 
 import React, { useState } from "react";
-import { Image, RefreshControl, ScrollView, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
@@ -49,18 +49,24 @@ export function Screen({
     );
   }
 
+  // The same keyboard handling as the sign-in screens: on iOS the keyboard
+  // slides over the app, so the scroll area is shortened by its height and a
+  // field near the bottom (Profile's password boxes) can be scrolled into
+  // view. Android resizes the window by itself.
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: p.base }}
-      contentContainerStyle={padding}
-      keyboardShouldPersistTaps="handled"
-      refreshControl={
-        onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={p.accent} colors={[p.accent]} /> : undefined
-      }
-    >
-      {header}
-      {children}
-    </ScrollView>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: p.base }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: p.base }}
+        contentContainerStyle={padding}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={p.accent} colors={[p.accent]} /> : undefined
+        }
+      >
+        {header}
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
