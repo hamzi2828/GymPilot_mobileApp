@@ -17,7 +17,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "rea
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GymPilotMark } from "@/components/icons";
-import { Body, Button, Caption, Field, Notice, Title } from "@/components/ui";
+import { Body, Button, Caption, Field, LegalLinks, Notice, Title } from "@/components/ui";
 import { API_CONFIGURED, API_HINT, NOT_CONFIGURED_MESSAGE } from "@/lib/config";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
@@ -187,6 +187,10 @@ export default function Login() {
             No username yet? Ask at the front desk — your gym issues it.
           </Body>
           {API_HINT ? <Caption style={{ fontSize: 11 }}>{API_HINT}</Caption> : null}
+        </View>
+
+        <View style={{ marginTop: space.xl }}>
+          <LegalLinks />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

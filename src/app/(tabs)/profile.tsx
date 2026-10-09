@@ -10,7 +10,7 @@ import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, Line, Loading, Notice, Pill, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, Title } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
@@ -488,6 +488,9 @@ export default function Profile() {
         <View style={{ alignItems: "center", marginTop: space.lg, gap: 2 }}>
           <Caption style={{ fontSize: 11 }}>{branding?.siteName || gymName}</Caption>
           <Caption style={{ fontSize: 11 }}>Powered by GymPilot</Caption>
+        </View>
+        <View style={{ marginTop: space.sm }}>
+          <LegalLinks />
         </View>
       </View>
     </Screen>

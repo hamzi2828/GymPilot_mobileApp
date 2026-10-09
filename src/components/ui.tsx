@@ -3,6 +3,8 @@
 
 import React from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
+import { PRIVACY_URL, TERMS_URL } from "@/lib/config";
+import { openWeb } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 
@@ -208,6 +210,26 @@ export function Line({ label, value }: { label: string; value: React.ReactNode }
       ) : (
         value
       )}
+    </View>
+  );
+}
+
+/**
+ * GymPilot's privacy policy and terms, opened over the app. On the sign-in
+ * screen and in Profile: the stores ask for both to be reachable before and
+ * after signing in.
+ */
+export function LegalLinks() {
+  const p = usePalette();
+  const link = (label: string, url: string) => (
+    <Pressable onPress={() => openWeb(url)} hitSlop={10} accessibilityRole="link" accessibilityLabel={label}>
+      <Text style={{ color: p.textMuted, fontSize: 12.5, fontWeight: "600", textDecorationLine: "underline" }}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: space.lg }}>
+      {link("Privacy Policy", PRIVACY_URL)}
+      {link("Terms", TERMS_URL)}
     </View>
   );
 }

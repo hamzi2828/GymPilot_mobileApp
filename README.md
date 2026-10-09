@@ -183,6 +183,11 @@ address, or still on the `https://api.example.com` placeholder, shows "This app
 build isn't configured with a server address" on the sign-in screen and
 disables signing in, rather than failing as if the gym were offline.
 
+`EXPO_PUBLIC_SITE_URL` is GymPilot's own website (not a gym's). The sign-in
+screen and Profile link to its `/privacy` and `/terms` pages, which both stores
+require; they open in the in-app browser. Left out, the app uses
+`https://gympilot-marketing.vercel.app`.
+
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint
@@ -266,7 +271,8 @@ src/
     format.ts             money, dates, durations
     useLoad.ts            loading / error / refresh, reloaded on focus
     storage.ts            SecureStore on a device, localStorage on web
-    config.ts             EXPO_PUBLIC_API_URL, and whether this build has a real one
+    config.ts             EXPO_PUBLIC_API_URL, and whether this build has a real one; the privacy and terms addresses
+    open.ts               web pages and other apps, opened so that a failure says so
 ```
 
 ## What it calls

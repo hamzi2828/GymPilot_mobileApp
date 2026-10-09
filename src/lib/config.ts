@@ -32,3 +32,13 @@ export const NOT_CONFIGURED_MESSAGE =
  * is pointed at. Empty in a store build: a member has no use for it.
  */
 export const API_HINT = __DEV__ ? `Trying ${API_URL}` : "";
+
+// GymPilot's own website -- not any gym's -- where the privacy policy and the
+// terms live. Set the same way as the API address: EXPO_PUBLIC_SITE_URL, from
+// .env or the build profile. Both stores require the two pages to be reachable
+// from inside the app, so a build that names no site still points at the live
+// one rather than shipping without them.
+const site = (process.env.EXPO_PUBLIC_SITE_URL || "").trim().replace(/\/+$/, "") || "https://gympilot-marketing.vercel.app";
+
+export const PRIVACY_URL = `${site}/privacy`;
+export const TERMS_URL = `${site}/terms`;
