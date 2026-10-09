@@ -230,8 +230,12 @@ own `EXPO_PUBLIC_API_URL`. `preview` and `production` point at the live API,
    `eas build --profile production --platform all` then `eas submit` for the
    stores.
 
-The icons under `assets/images` and `assets/expo.icon` are still placeholders
-and want replacing before a store submission.
+The icons and the splash image under `assets/images` are GymPilot's own mark,
+rasterised from `GymPilot_frontendAdmin/src/app/icon.svg`: `icon.png` (1024,
+full bleed, no transparency) for both stores, the three `android-icon-*` layers
+for Android's adaptive icon, and `splash-icon.png` on the app's black. To change
+the mark, export the same sizes over these files; `app.json` already points at
+them.
 
 ---
 

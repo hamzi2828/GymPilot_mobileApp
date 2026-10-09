@@ -13,9 +13,10 @@
 // says so here rather than failing with "cannot reach your gym".
 
 import React, { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GymPilotMark } from "@/components/icons";
 import { Body, Button, Caption, Field, Notice, Title } from "@/components/ui";
 import { API_CONFIGURED, API_HINT, NOT_CONFIGURED_MESSAGE } from "@/lib/config";
 import { usePalette, useSession } from "@/lib/session";
@@ -106,7 +107,7 @@ export default function Login() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ alignItems: "center", marginBottom: space.xxl }}>
-          <Image source={require("../../assets/images/icon.png")} style={{ width: 68, height: 68, borderRadius: 20 }} accessibilityLabel="GymPilot" />
+          <GymPilotMark />
           <Title style={{ marginTop: space.lg }}>{challenge ? "Check your email" : "GymPilot"}</Title>
           <Caption style={{ marginTop: 6, textAlign: "center", fontSize: 14 }}>
             {challenge ? "Type the 6-digit code we sent you to finish signing in." : "Sign in with the username and password your gym gave you."}
