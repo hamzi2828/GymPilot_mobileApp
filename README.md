@@ -17,7 +17,7 @@ only way in is a username the gym issued.
 | **Classes**    | The gym's timetable, day by day. Book a class, join the waitlist when it is full, cancel a booking — with a warning when the cancel is a late one. |
 | **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — and a way to the website for plans and invoice PDFs. |
 | **Profile**    | Their details, their sign-in username, notification switches, the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
-| **Check in**   | A QR code the front desk scans, with a short countdown and a typed fallback number. |
+| **Check in**   | A QR code the front desk scans, with how long it works for and a typed fallback number. The last code is kept on the phone, so it still shows with no signal at the door. |
 | **Visits**     | Every visit the desk has recorded, month by month. |
 | **Bookings**   | Every class they booked before today: attended, missed, cancelled, cancelled late. |
 
@@ -142,6 +142,13 @@ The session is kept in three Secure Store entries — the token and gym slug,
 the member, and the branding — so a branding record too big for Android's
 keychain cannot take the member's name with it. A reply that comes back after
 a sign-out is dropped rather than written back.
+
+The last check-in code is a fourth entry (`src/lib/checkinCode.ts`), stored
+with the gym and member it belongs to. The server's codes last two days, so
+the check-in screen shows the saved one at once while it fetches a newer one,
+and keeps showing it — marked "Saved code" — when the server cannot be
+reached. It is never shown past its expiry or to a different member, it is
+dropped if the server refuses to issue a code, and sign-out deletes it.
 
 ## Push notifications
 
@@ -288,6 +295,7 @@ src/
     format.ts             money, dates, durations
     useLoad.ts            loading / error / refresh, reloaded on focus
     storage.ts            SecureStore on a device, localStorage on web
+    checkinCode.ts        the last check-in code, kept for when there is no signal
     config.ts             EXPO_PUBLIC_API_URL, and whether this build has a real one; the privacy and terms addresses
     open.ts               web pages and other apps, opened so that a failure says so
 ```

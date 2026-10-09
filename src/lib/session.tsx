@@ -6,6 +6,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, login as loginRequest, loginTwoFactor as twoFactorRequest, type Session } from "./api";
+import { clearSavedCode } from "./checkinCode";
 import { registerForPush, unregisterPush } from "./push";
 import { getItem, removeItem, setItem } from "./storage";
 import { paletteFrom, type Palette } from "./theme";
@@ -177,7 +178,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // network, and one that cannot get through is retried later.
       void unregisterPush();
       setSignOutReason(reason || null);
-      await persist(null);
+      // The saved check-in code goes with the session: it is the member's
+      // way through the door, and must not outlive their sign-in here.
+      await Promise.all([persist(null), clearSavedCode()]);
     },
     [persist]
   );
