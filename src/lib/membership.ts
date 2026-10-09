@@ -38,6 +38,17 @@ export function isLive(o: MembershipOrder): boolean {
   return o.payment?.status === "paid" && LIVE_STATUSES.includes(o.status);
 }
 
+/**
+ * What is still owed on an order the desk let the member pay for in parts.
+ * Such an order stays 'paid' -- that is what keeps the door open -- so the
+ * payment status alone would tell a member they are paid up when they are
+ * not. 0 when nothing is owed.
+ */
+export function balanceOwing(o: MembershipOrder): number {
+  const due = Number(o.payment?.balanceDue);
+  return o.payment?.status === "paid" && Number.isFinite(due) && due > 0 ? due : 0;
+}
+
 /** A term still to begin: a renewal bought early is live from the day it is paid, but starts when the current one ends. */
 export function startsLater(o: MembershipOrder, now = Date.now()): boolean {
   const start = o.subscription?.startDate ? new Date(o.subscription.startDate).getTime() : NaN;

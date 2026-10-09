@@ -227,6 +227,14 @@ export interface MembershipOrder {
     method: string;
     amount: number;
     currency: string;
+    /**
+     * A membership sold at the desk may be paid for in parts. It keeps status
+     * 'paid' while it is, so these two are the only sign that money is still
+     * owed: what has arrived so far (null on an order paid in one go), and
+     * what is left.
+     */
+    amountPaid?: number | null;
+    balanceDue?: number;
     /** Only an order with a Stripe subscription behind it renews by itself. */
     stripeSubscriptionId?: string | null;
     /** Why the last charge failed, on a past-due membership. */

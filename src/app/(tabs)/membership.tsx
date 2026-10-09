@@ -30,6 +30,7 @@ import { confirmAction } from "@/lib/confirm";
 import { longDate, money, relativeDays } from "@/lib/format";
 import {
   awaitingPayment,
+  balanceOwing,
   currentMembership,
   endDateLabel,
   endedMemberships,
@@ -91,6 +92,7 @@ export default function Membership() {
   const pastDue = current?.status === "past_due";
   const stopping = !!current?.subscription?.cancelAtPeriodEnd;
   const renews = !!current && renewsAutomatically(current);
+  const owing = current ? balanceOwing(current) : 0;
 
   const siteUrl = branding?.siteUrl || "";
   const openSite = (path: string) => {
@@ -166,6 +168,9 @@ export default function Membership() {
           <View style={{ flex: 1 }}>
             <Body style={{ fontWeight: "600" }}>{o.packageDetails?.name || o.orderNumber}</Body>
             {when ? <Caption style={{ marginTop: 2 }}>{when}</Caption> : null}
+            {balanceOwing(o) > 0 ? (
+              <Caption style={{ marginTop: 2, color: p.warning }}>{money(balanceOwing(o), o.payment.currency)} still to pay at the front desk</Caption>
+            ) : null}
           </View>
           <Pill label={pill.label} tone={pill.tone} />
         </View>
@@ -267,10 +272,24 @@ export default function Membership() {
                 payment -- so the renewal that failed is said here instead. */}
             <Line
               label="Payment"
-              value={`${pastDue ? "failed" : current.payment?.status || "—"}${current.payment?.method ? ` · ${current.payment.method}` : ""}`}
+              value={`${pastDue ? "failed" : owing > 0 ? "part paid" : current.payment?.status || "—"}${current.payment?.method ? ` · ${current.payment.method}` : ""}`}
             />
+            {/* Paid for in parts: the order still says 'paid', so the money
+                left to pay is said in so many words. */}
+            {owing > 0 && current.payment?.amountPaid != null ? (
+              <Line label="Paid so far" value={money(current.payment.amountPaid, current.payment.currency)} />
+            ) : null}
+            {owing > 0 ? (
+              <Line label="Still to pay" value={<Body style={{ color: p.warning, fontWeight: "800", fontSize: 14 }}>{money(owing, current.payment.currency)}</Body>} />
+            ) : null}
             {invoiceLink(current)}
           </Card>
+
+          {owing > 0 ? (
+            <Notice tone="warn">
+              You still have {money(owing, current.payment.currency)} to pay on this membership. Pay it at the front desk.
+            </Notice>
+          ) : null}
 
           {/* A renewal the card could not pay for. Stripe keeps retrying; a
               new card goes in on the website's account page. */}

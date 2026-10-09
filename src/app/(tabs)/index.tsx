@@ -8,8 +8,8 @@ import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
-import { dayLabel, longDate, relativeDays, timeRange } from "@/lib/format";
-import { awaitingPayment, currentMembership, endDateLabel, SITE_ACCOUNT_HISTORY, SITE_PACKAGES, statusPill } from "@/lib/membership";
+import { dayLabel, longDate, money, relativeDays, timeRange } from "@/lib/format";
+import { awaitingPayment, balanceOwing, currentMembership, endDateLabel, isLive, SITE_ACCOUNT_HISTORY, SITE_PACKAGES, statusPill } from "@/lib/membership";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -35,6 +35,9 @@ export default function Home() {
   // Only a paid, live order is "your membership" (see lib/membership).
   const active = currentMembership(memberships.data?.data || []);
   const waiting = awaitingPayment(memberships.data?.data || []);
+  // Everything still owed on what they hold now, a session pack alongside
+  // the membership included.
+  const owing = (memberships.data?.data || []).filter(isLive).reduce((sum, o) => sum + balanceOwing(o), 0);
   const siteUrl = branding?.siteUrl || "";
   const openSite = (path: string) => {
     if (siteUrl) WebBrowser.openBrowserAsync(`${siteUrl}${path}`);
@@ -132,6 +135,15 @@ export default function Home() {
               ) : null}
               {active.packageDetails?.sessions ? (
                 <Line label="Sessions left" value={`${Math.max(0, (active.sessions?.total || 0) - (active.sessions?.used || 0))} of ${active.sessions?.total || 0}`} />
+              ) : null}
+              {/* Paid for in parts and not finished: the status above still
+                  says active, so the money owed is said here. */}
+              {owing > 0 ? (
+                <Pressable onPress={() => router.navigate("/(tabs)/membership")} hitSlop={8} accessibilityRole="link" style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
+                  <Body style={{ color: p.warning, fontWeight: "700", fontSize: 14 }}>
+                    {money(owing, active.payment.currency)} still to pay — pay at the front desk ›
+                  </Body>
+                </Pressable>
               ) : null}
               {/* A renewal the card could not pay for: the new card goes in
                   on the website's account page. */}
