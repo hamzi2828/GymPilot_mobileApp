@@ -29,10 +29,15 @@ const MIN_PASSWORD = 8;
  */
 function saveProblem(e: unknown): string {
   if (!(e instanceof ApiError)) return e instanceof Error ? e.message : "Could not save your details.";
-  // Changing the email address is the one edit the server wants the current
-  // password for: whoever holds the address can reset the password.
-  if (e.code === "PASSWORD_REQUIRED") return "Enter your current password to change your email address.";
+  // Adding, changing or removing the email address is the one edit the
+  // server wants the current password for: whoever holds the address can
+  // reset the password.
+  if (e.code === "PASSWORD_REQUIRED") return "Enter your current password to change or remove your email address.";
   if (e.code === "PASSWORD_INCORRECT") return "That password is not right, so nothing was changed. Check it and try again.";
+  // An account that only ever signed in with Google on the website.
+  if (e.code === "PASSWORD_NOT_SET") {
+    return "Your account has no password yet, so nothing was changed. Sign out, set one with Forgot password on the sign-in screen, then try again.";
+  }
   const detail = e.detail || "";
   if (/E11000|duplicate key/i.test(detail)) {
     return /email/i.test(detail)
@@ -66,6 +71,10 @@ export default function Profile() {
   // Shown inside the password card, next to the fields it is about.
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // "Send the link again", for an email address not confirmed yet: whether
+  // it is on its way, and what the server answered.
+  const [sendingLink, setSendingLink] = useState(false);
+  const [linkAnswer, setLinkAnswer] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", goals: "", currentPassword: "" });
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
@@ -112,8 +121,37 @@ export default function Profile() {
     }
   };
 
-  // Whether the email box now says something other than what the gym has.
-  // Only then is the address sent at all, and the current password with it.
+  // A new sign-up's address, or one just changed, is unconfirmed until the
+  // link emailed to it is opened. The profile just loaded knows best; the
+  // copy kept from sign-in stands in until it arrives.
+  const emailUnconfirmed = me ? !!me.email && me.emailVerified === false : !!user?.email && user.emailVerified === false;
+
+  const sendConfirmation = async () => {
+    if (sendingLink) return;
+    setSendingLink(true);
+    setLinkAnswer(null);
+    try {
+      const res = await api<{ message?: string; alreadyVerified?: boolean }>("/user/verify-email/send", { method: "POST", session, onUnauthorised: signOut });
+      setLinkAnswer({ tone: "ok", text: res.message || "We sent you a new link. Open it to confirm the address is yours." });
+      // Confirmed in the meantime: read the profile again, and the line goes.
+      if (res.alreadyVerified) {
+        profile.reload();
+        refresh();
+      }
+    } catch (e) {
+      if (closed.caught(e)) return;
+      // No address on the account, the email could not be sent, or too many
+      // were asked for: the server says which, in its own words.
+      setLinkAnswer({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not send the link. Please try again later." });
+    } finally {
+      setSendingLink(false);
+    }
+  };
+
+  // Whether the email box now says something other than what the gym has
+  // (a new address, a different one, or none). Only then is the address sent
+  // at all, and the current password with it: the server asks for it for a
+  // removal as much as for a change.
   const emailChanged = form.email.trim().toLowerCase() !== (me?.email || "").trim().toLowerCase();
 
   const save = async () => {
@@ -416,7 +454,7 @@ export default function Profile() {
               autoCapitalize="none"
               autoComplete="current-password"
               textContentType="password"
-              hint="Needed because you are changing your email address."
+              hint={form.email.trim() ? "Needed because you are changing your email address." : "Needed because you are removing your email address."}
             />
           ) : null}
           <Field label="Phone" value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v })} keyboardType="phone-pad" />
@@ -439,6 +477,15 @@ export default function Profile() {
             </Pressable>
           </View>
           <Line label="Email" value={me?.email || user?.email || "—"} />
+          {emailUnconfirmed ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 4 }}>
+              <Caption>Email not confirmed.</Caption>
+              <Pressable onPress={sendConfirmation} disabled={sendingLink} hitSlop={8} accessibilityRole="button" accessibilityState={{ busy: sendingLink }}>
+                <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>{sendingLink ? "Sending…" : "Send the link again"}</Body>
+              </Pressable>
+            </View>
+          ) : null}
+          {linkAnswer ? <Caption style={{ color: linkAnswer.tone === "ok" ? p.success : p.danger, textAlign: "right", marginBottom: 4 }}>{linkAnswer.text}</Caption> : null}
           <Line label="Phone" value={me?.phone || user?.phone || "—"} />
           {me?.dateOfBirth ? <Line label="Date of birth" value={longDate(me.dateOfBirth)} /> : null}
           {me?.goals ? <Line label="Training for" value={me.goals} /> : null}

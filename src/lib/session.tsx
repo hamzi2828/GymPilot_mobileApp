@@ -36,6 +36,7 @@ function memberFrom(p: Profile, before: Member | null): Member {
     firstName: p.firstName || "",
     lastName: p.lastName || "",
     email: p.email || "",
+    emailVerified: p.emailVerified !== false,
     phone: p.phone || "",
     role: p.role || before?.role || "",
     avatarUrl: p.avatarUrl || "",

@@ -37,6 +37,8 @@ export interface Member {
   firstName: string;
   lastName: string;
   email: string;
+  /** False until the member opens the link emailed to a new or changed address. */
+  emailVerified?: boolean;
   phone: string;
   role: string;
   avatarUrl: string;
@@ -264,6 +266,8 @@ export interface Profile {
   firstName: string;
   lastName: string;
   email: string;
+  /** False until the member opens the link emailed to a new or changed address. */
+  emailVerified?: boolean;
   phone?: string;
   role?: string;
   avatarUrl?: string;
