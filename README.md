@@ -74,6 +74,12 @@ reset link the gym's website sends. The link opens on the website, where the
 new password is chosen; the app has no reset page of its own. The answer is
 always the same generic 200, whether or not the username exists.
 
+An account with no email address gets no link, and the server does not say so.
+The app therefore never claims "we emailed you": after sending, it says a link
+is on its way *if* the account has an address, and that the front desk can set
+a new password when no email arrives or the gym was never given one. The same
+words for every username, so nothing is given away.
+
 It is also how a member who joined with Google on the website gets a password
 for the app — that account has none until they set one — and the sign-in and
 forgot-password screens say so.

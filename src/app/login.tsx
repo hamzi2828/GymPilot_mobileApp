@@ -44,6 +44,12 @@ export default function Login() {
       setError("Enter the username and password your gym gave you.");
       return;
     }
+    // Sign-in is by username only, and no username has an @ in it: say so
+    // rather than let an email address come back as "wrong password".
+    if (username.includes("@")) {
+      setError("That looks like an email address. Sign in with the username your gym gave you instead, for example saramalik284.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -150,6 +156,7 @@ export default function Login() {
               textContentType="username"
               placeholder="e.g. saramalik284"
               returnKeyType="next"
+              hint="The username your gym gave you, not your email address."
             />
             <Field
               label="Password"
@@ -184,7 +191,7 @@ export default function Login() {
 
         <View style={{ marginTop: space.xl, alignItems: "center", gap: 6 }}>
           <Body muted style={{ fontSize: 13.5, textAlign: "center" }}>
-            No username yet? Ask at the front desk — your gym issues it.
+            Cannot find your username? Your gym gave it to you with your password. The front desk can look it up, and issues one if you have none yet.
           </Body>
           {API_HINT ? <Caption style={{ fontSize: 11 }}>{API_HINT}</Caption> : null}
         </View>
