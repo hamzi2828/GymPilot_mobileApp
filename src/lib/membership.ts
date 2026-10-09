@@ -21,9 +21,9 @@
 
 import type { MembershipOrder } from "@/lib/types";
 
-/** Where on the gym's website these things live: buying and paying happen there. */
+/** Where on the gym's website these things live: buying a plan happens there. */
 export const SITE_PACKAGES = "/packages";
-/** The account page: invoices, and the button that opens Stripe to change the card. */
+/** The account page, for invoice PDFs. (The card is changed from the app: see openBilling on the Membership tab.) */
 export const SITE_ACCOUNT_HISTORY = "/user-detail?tab=history";
 /** The bank details and the receipt upload for one order waiting on a transfer. */
 export const siteBankTransfer = (orderId: string) => `/checkout/bank-transfer?order=${encodeURIComponent(orderId)}`;

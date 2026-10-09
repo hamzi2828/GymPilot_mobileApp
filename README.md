@@ -15,7 +15,7 @@ only way in is a username the gym issued.
 | -------------- | -------------- |
 | **Home**       | Check in, the gym's announcements, the membership at a glance, the next classes they booked, and how much they have trained. |
 | **Classes**    | The gym's timetable, day by day. Book a class, join the waitlist when it is full, cancel a booking — with a warning when the cancel is a late one. |
-| **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — and a way to the website for plans and invoice PDFs. |
+| **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — any balance still owed, changing the card it renews on, and a way to the website for plans and invoice PDFs. |
 | **Profile**    | Their details, their sign-in username, notification switches, the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
 | **Check in**   | A QR code the front desk scans, with how long it works for and a typed fallback number. The last code is kept on the phone, so it still shows with no signal at the door. |
 | **Visits**     | Every visit the desk has recorded, month by month. |
@@ -128,8 +128,14 @@ Branding also carries `siteUrl` (the gym's website — the registered domain,
 else `<slug>.<platform domain>`), and the gym's `phone` and `supportEmail` when
 Settings has them. The website is where the app sends a member to buy or change
 a plan (`/packages`) and to download invoice PDFs (`/user-detail?tab=history`):
-the PDF route needs a website sign-in, so the app opens the account page in the
-browser rather than the PDF directly.
+the PDF route takes the sign-in as a header, which a browser cannot send, so
+the app opens the account page rather than the PDF directly.
+
+Changing the card does not go through the website. **Update my card** (shown
+when a renewal failed) and **Change my card** (on any membership that renews by
+card) call `POST /api/gymfolio/package-orders/:id/billing-portal` and open the
+address it returns — the payment provider's own billing page — over the app,
+with no second sign-in.
 
 If the gym changes its scheme, the app picks it up the next time the member
 opens their profile (`GET /api/mobile/branding?gym=<slug>`), without a new
@@ -347,6 +353,7 @@ the tenant header:
 | `GET /api/gymfolio/timetable` · `POST /api/gymfolio/bookings` · `DELETE /api/gymfolio/bookings/:id` · `GET /api/gymfolio/bookings/me?scope=past` | classes, and the booking history |
 | `GET /api/gymfolio/package-orders/me` · `GET /api/gymfolio/membership/rules` · `GET /api/gymfolio/packages/active` | the membership |
 | `POST /api/gymfolio/package-orders/:id/{freeze,unfreeze,cancel,resume}` | pausing, cancelling, and undoing a cancellation |
+| `POST /api/gymfolio/package-orders/:id/billing-portal` | a link to the payment provider's page for changing the card |
 
 The server decides what a member may do — how far ahead they can book, whether
 they may pause or cancel at all — and the app shows what it is told.

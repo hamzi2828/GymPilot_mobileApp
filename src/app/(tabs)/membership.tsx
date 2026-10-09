@@ -11,10 +11,13 @@
 // Whether a member may freeze or cancel at all is the gym's decision and
 // arrives from /membership/rules; the server enforces it either way.
 //
-// Buying, renewing, paying and invoices stay on the gym's website: paying is
-// the website's job (a new card for a failed renewal included), and the
-// invoice PDF is served to a website sign-in, so the app opens the website's
-// account page rather than pretending otherwise.
+// Buying and renewing stay on the gym's website: taking a first payment is
+// the website's job. Changing the card is not -- that happens on the payment
+// provider's own billing page, and the server hands the app a link to it
+// (POST .../billing-portal), so a failed renewal is fixed from here with no
+// second sign-in. The invoice PDF is the one thing left behind: its route
+// wants the sign-in sent as a header, which a browser cannot do, so that
+// link still opens the website's account page.
 //
 // Which order is "the membership" is decided in lib/membership: only a paid,
 // live one. A bank transfer still waiting is shown on its own, and a card
@@ -57,7 +60,7 @@ interface Rules {
 // server's own message is written for the gym's staff (it points at Stripe).
 // Any other refusal is shown as the server words it.
 const PAUSE_REFUSED: Record<string, string> = {
-  FREEZE_PAYMENT_OUTSTANDING: "Your last card payment didn't go through — update your card on the website before pausing.",
+  FREEZE_PAYMENT_OUTSTANDING: "Your last card payment didn't go through. Update your card first, then pause.",
   FREEZE_STRIPE_PAUSED: "Your membership can't be paused from the app right now. Please ask at the front desk.",
   FREEZE_STRIPE_UNSUPPORTED: "Your membership can't be paused from the app right now. Please ask at the front desk.",
 };
@@ -147,12 +150,43 @@ export default function Membership() {
     );
   };
 
+  // The card behind a membership that renews by itself is changed on the
+  // payment provider's own page. The server makes a link to it that is good
+  // for this member and this order only, and it opens over the app: no
+  // website, and no second sign-in. When the browser closes, the list is
+  // read again -- a new card usually clears a failed payment within moments.
+  const CARD = "Update my card";
+  const openBilling = async (o: MembershipOrder) => {
+    if (acting.current) return;
+    acting.current = true;
+    setBusy(CARD);
+    setMessage(null);
+    try {
+      const res = await api<{ url?: string }>(`/api/gymfolio/package-orders/${o._id}/billing-portal`, { method: "POST", session, onUnauthorised: signOut });
+      if (!res.url) throw new Error("Your card page could not be opened just now. Please try again, or ask at the front desk.");
+      await openWeb(res.url);
+      orders.reload();
+    } catch (e) {
+      if (closed.caught(e)) return;
+      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Your card page could not be opened just now." });
+    } finally {
+      acting.current = false;
+      setBusy(null);
+    }
+  };
+
   // The invoice PDF needs the website's own sign-in, so the link goes to the
   // account page there, where every invoice can be downloaded.
   const invoiceLink = (o: MembershipOrder) =>
     o.payment?.status === "paid" && siteUrl ? (
-      <Pressable onPress={() => openSite(SITE_ACCOUNT_HISTORY)} hitSlop={8} style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
-        <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Invoice PDF ›</Body>
+      <Pressable
+        onPress={() => openSite(SITE_ACCOUNT_HISTORY)}
+        hitSlop={8}
+        accessibilityRole="link"
+        accessibilityLabel={`Invoice for ${o.packageDetails?.name || o.orderNumber}, on your gym's website`}
+        style={{ marginTop: space.sm, alignSelf: "flex-start" }}
+      >
+        <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Invoice PDF on the website ›</Body>
       </Pressable>
     ) : null;
 
@@ -295,6 +329,19 @@ export default function Membership() {
               <Line label="Still to pay" value={<Body style={{ color: p.warning, fontWeight: "800", fontSize: 14 }}>{money(owing, current.payment.currency)}</Body>} />
             ) : null}
             {invoiceLink(current)}
+            {/* Paid by a card that is charged again by itself: the card can
+                be changed before it ever fails. */}
+            {current.payment?.stripeSubscriptionId && !pastDue ? (
+              <Pressable
+                onPress={() => openBilling(current)}
+                disabled={!!busy}
+                hitSlop={8}
+                accessibilityRole="link"
+                style={{ marginTop: space.sm, alignSelf: "flex-start", opacity: busy ? 0.5 : 1 }}
+              >
+                <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Change my card ›</Body>
+              </Pressable>
+            ) : null}
           </Card>
 
           {owing > 0 ? (
@@ -303,17 +350,15 @@ export default function Membership() {
             </Notice>
           ) : null}
 
-          {/* A renewal the card could not pay for. Stripe keeps retrying; a
-              new card goes in on the website's account page. */}
+          {/* A renewal the card could not pay for. Stripe keeps retrying; the
+              new card goes in on its billing page, opened from here. */}
           {pastDue ? (
             <>
               <Notice tone="error">
-                Payment failed — update your card on the website to keep your membership.
+                Payment failed — update your card to keep your membership.
                 {current.payment?.lastPaymentError ? ` (${current.payment.lastPaymentError})` : ""}
               </Notice>
-              {siteUrl ? (
-                <Button label="Update my card on the website" onPress={() => openSite(SITE_ACCOUNT_HISTORY)} style={{ marginBottom: space.lg }} />
-              ) : null}
+              <Button label={CARD} busy={busy === CARD} disabled={!!busy} onPress={() => openBilling(current)} style={{ marginBottom: space.lg }} />
             </>
           ) : null}
 

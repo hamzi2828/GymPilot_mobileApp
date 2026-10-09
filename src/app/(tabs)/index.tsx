@@ -8,7 +8,7 @@ import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
 import { dayLabel, longDate, money, relativeDays, timeRange } from "@/lib/format";
-import { awaitingPayment, balanceOwing, currentMembership, endDateLabel, isLive, SITE_ACCOUNT_HISTORY, SITE_PACKAGES, statusPill } from "@/lib/membership";
+import { awaitingPayment, balanceOwing, currentMembership, endDateLabel, isLive, SITE_PACKAGES, statusPill } from "@/lib/membership";
 import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
@@ -145,18 +145,16 @@ export default function Home() {
                   </Body>
                 </Pressable>
               ) : null}
-              {/* A renewal the card could not pay for: the new card goes in
-                  on the website's account page. */}
+              {/* A renewal the card could not pay for: the Membership tab
+                  has the button that opens the card page. */}
               {active.status === "past_due" ? (
                 <Pressable
-                  onPress={() => openSite(SITE_ACCOUNT_HISTORY)}
-                  disabled={!siteUrl}
+                  onPress={() => router.navigate("/(tabs)/membership")}
                   hitSlop={8}
+                  accessibilityRole="link"
                   style={{ marginTop: space.sm, alignSelf: "flex-start" }}
                 >
-                  <Body style={{ color: p.danger, fontWeight: "700", fontSize: 14 }}>
-                    Payment failed — update your card on the website{siteUrl ? " ›" : ""}
-                  </Body>
+                  <Body style={{ color: p.danger, fontWeight: "700", fontSize: 14 }}>Payment failed — update your card ›</Body>
                 </Pressable>
               ) : null}
             </Card>
