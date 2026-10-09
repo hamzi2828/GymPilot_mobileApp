@@ -246,7 +246,7 @@ export default function Membership() {
               : `Send the transfer with ${o.orderNumber} as the reference, then send the gym your receipt from the website.`}
         </Caption>
         {transfer && siteUrl ? (
-          <Pressable onPress={() => openSite(siteBankTransfer(o._id))} hitSlop={8} style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
+          <Pressable onPress={() => openSite(siteBankTransfer(o._id))} hitSlop={8} accessibilityRole="link" style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
             <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>{receiptSent ? "Transfer details ›" : "Bank details and receipt ›"}</Body>
           </Pressable>
         ) : null}
@@ -399,6 +399,8 @@ export default function Membership() {
                       <Pressable
                         key={days}
                         onPress={() => pauseFor(days)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Pause for ${days} days`}
                         style={({ pressed }) => ({
                           backgroundColor: pressed ? p.accentDark : p.accent,
                           borderRadius: radius.pill,

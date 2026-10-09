@@ -94,6 +94,8 @@ export default function Home() {
           <Pressable
             onPress={() => router.push("/checkin")}
             accessibilityRole="button"
+            accessibilityLabel={summary?.checked_in_now ? "Check in. You are inside right now." : "Check in"}
+            accessibilityHint="Shows the code to scan at the front desk"
             style={({ pressed }) => ({
               backgroundColor: p.accent,
               opacity: pressed ? 0.9 : 1,
@@ -212,7 +214,7 @@ export default function Home() {
           {/* How they are doing. Tapping through shows every visit. */}
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Heading>Your training</Heading>
-            <Pressable onPress={() => router.push("/attendance")} hitSlop={10} style={{ marginBottom: space.md }}>
+            <Pressable onPress={() => router.push("/attendance")} hitSlop={10} accessibilityRole="button" accessibilityLabel="See all your visits" style={{ marginBottom: space.md }}>
               <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13.5 }}>All visits</Body>
             </Pressable>
           </View>
@@ -223,7 +225,13 @@ export default function Home() {
           ) : !summary ? (
             <Empty title="No visits recorded yet" />
           ) : (
-            <Pressable onPress={() => router.push("/attendance")} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+            <Pressable
+              onPress={() => router.push("/attendance")}
+              accessibilityRole="button"
+              accessibilityLabel={`${summary.this_month?.visits ?? 0} visits in ${summary.this_month?.label || "this month"}, ${summary.visits} in total, ${summary.total_label} trained.`}
+              accessibilityHint="Shows every visit"
+              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+            >
               <Card>
                 <View style={{ flexDirection: "row", gap: space.md }}>
                   <Stat value={summary.this_month?.visits ?? 0} label={`visits in ${summary.this_month?.label || "this month"}`} />

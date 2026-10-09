@@ -179,6 +179,7 @@ export default function Login() {
             <Pressable
               onPress={() => router.push("/forgot")}
               hitSlop={10}
+              accessibilityRole="button"
               style={{ alignSelf: "center", marginTop: space.lg }}
               disabled={busy || !API_CONFIGURED}
             >

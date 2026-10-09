@@ -200,7 +200,7 @@ export default function CheckIn() {
             <Title style={{ marginTop: 6, fontSize: 30, letterSpacing: 4 }}>{code.code}</Title>
           </Card>
 
-          <Pressable onPress={load} style={{ marginTop: space.lg, alignItems: "center" }} hitSlop={10}>
+          <Pressable onPress={load} style={{ marginTop: space.lg, alignItems: "center" }} hitSlop={10} accessibilityRole="button">
             <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Get a new code</Body>
           </Pressable>
         </>

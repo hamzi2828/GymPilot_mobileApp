@@ -209,6 +209,19 @@ export function GymClosed({ message }: { message: string }) {
   );
 }
 
+/** A row that leads somewhere else in the app: its name, and a chevron. */
+export function RowLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const p = usePalette();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+      <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Body style={{ fontWeight: "600" }}>{label}</Body>
+        <Body style={{ color: p.textFaint }}>›</Body>
+      </Card>
+    </Pressable>
+  );
+}
+
 export function Divider() {
   const p = usePalette();
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.border, marginVertical: space.md }} />;

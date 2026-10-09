@@ -69,6 +69,9 @@ export default function Attendance() {
                   <Pressable
                     key={chip.key || "all"}
                     onPress={() => setMonth(chip.key || null)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={chip.key ? `${chip.label.replace(" · ", ", ")} visits` : "All visits"}
                     style={{
                       backgroundColor: on ? p.accent : p.cardRaised,
                       borderRadius: radius.pill,

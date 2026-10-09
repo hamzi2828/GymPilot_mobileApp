@@ -9,7 +9,7 @@ import { Pressable, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { GymMark, Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, RowLink, Title } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
@@ -372,7 +372,12 @@ export default function Profile() {
 
       {/* The username the gym gave them, which is how they get back in. */}
       {username ? (
-        <Pressable onPress={copyUsername}>
+        <Pressable
+          onPress={copyUsername}
+          accessibilityRole="button"
+          accessibilityLabel={`Your sign-in username, ${username}${copied ? ". Copied." : ""}`}
+          accessibilityHint="Copies your username"
+        >
           <Card style={{ marginBottom: space.lg }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
               <View style={{ flex: 1 }}>
@@ -429,7 +434,7 @@ export default function Profile() {
         <Card style={{ marginBottom: space.lg }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Heading>Your details</Heading>
-            <Pressable onPress={startEditing} hitSlop={10} style={{ marginBottom: space.md }}>
+            <Pressable onPress={startEditing} hitSlop={10} accessibilityRole="button" accessibilityLabel="Edit your details" style={{ marginBottom: space.md }}>
               <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Edit</Body>
             </Pressable>
           </View>
@@ -523,29 +528,9 @@ export default function Profile() {
 
       {/* Everything else */}
       <View style={{ gap: space.sm }}>
-        <Pressable
-          onPress={() => router.push("/attendance")}
-          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-        >
-          <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <Body style={{ fontWeight: "600" }}>Your visits</Body>
-            <Body style={{ color: p.textFaint }}>›</Body>
-          </Card>
-        </Pressable>
-
-        <Pressable onPress={() => router.push("/bookings")} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-          <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <Body style={{ fontWeight: "600" }}>Your past bookings</Body>
-            <Body style={{ color: p.textFaint }}>›</Body>
-          </Card>
-        </Pressable>
-
-        <Pressable onPress={() => router.push("/checkin")} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-          <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <Body style={{ fontWeight: "600" }}>Your check-in code</Body>
-            <Body style={{ color: p.textFaint }}>›</Body>
-          </Card>
-        </Pressable>
+        <RowLink label="Your visits" onPress={() => router.push("/attendance")} />
+        <RowLink label="Your past bookings" onPress={() => router.push("/bookings")} />
+        <RowLink label="Your check-in code" onPress={() => router.push("/checkin")} />
 
         {changingPassword ? (
           <Card>
@@ -585,12 +570,7 @@ export default function Profile() {
             />
           </Card>
         ) : (
-          <Pressable onPress={() => setChangingPassword(true)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-            <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Body style={{ fontWeight: "600" }}>Change your password</Body>
-              <Body style={{ color: p.textFaint }}>›</Body>
-            </Card>
-          </Pressable>
+          <RowLink label="Change your password" onPress={() => setChangingPassword(true)} />
         )}
 
         <Button label="Sign out" variant="danger" onPress={confirmSignOut} style={{ marginTop: space.md }} />

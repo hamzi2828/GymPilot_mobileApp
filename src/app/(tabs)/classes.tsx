@@ -164,6 +164,9 @@ export default function Classes() {
           <Pressable
             key={tab.label}
             onPress={() => setOnlyMine(tab.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: onlyMine === tab.value }}
+            accessibilityLabel={tab.value ? "Only the classes I booked" : "Every class"}
             style={{
               backgroundColor: onlyMine === tab.value ? p.accent : p.cardRaised,
               borderRadius: radius.pill,
@@ -175,7 +178,7 @@ export default function Classes() {
           </Pressable>
         ))}
         <View style={{ flex: 1 }} />
-        <Pressable onPress={() => router.push("/bookings")} hitSlop={10}>
+        <Pressable onPress={() => router.push("/bookings")} hitSlop={10} accessibilityRole="button" accessibilityLabel="Your past bookings">
           <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13.5 }}>History ›</Body>
         </Pressable>
       </View>
@@ -207,11 +210,31 @@ export default function Classes() {
                 // it counts as a late one, which the confirm says first).
                 const actionable = booked || s.can_book;
 
+                // The whole card is the button, so a screen reader is told
+                // what the card is, how it stands, and what a tap will do --
+                // the same three things the pill and the colours say by eye.
+                const standing = booked
+                  ? waitlisted
+                    ? `You are on the waitlist${s.my_booking?.waitlist_position ? `, number ${s.my_booking.waitlist_position}` : ""}`
+                    : "You are booked"
+                  : s.is_cancelled
+                    ? "Cancelled"
+                    : s.is_full
+                      ? `Full, ${s.waitlist_count} waiting`
+                      : s.is_closed
+                        ? "Booking closed"
+                        : `${s.spots_left} places left`;
+                const tapDoes = booked ? "Cancels your booking" : !s.can_book ? undefined : s.is_full ? "Joins the waitlist" : "Books this class";
+
                 return (
                   <Pressable
                     key={keyOf(s)}
                     disabled={!actionable || busyKey !== null}
                     onPress={() => (booked ? cancel(s) : book(s))}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${s.class_name}, ${dayLabel(s.date)} at ${s.start_time}${s.instructor_name ? `, with ${s.instructor_name}` : ""}. ${standing}.`}
+                    accessibilityHint={tapDoes}
+                    accessibilityState={{ disabled: !actionable || busyKey !== null, busy }}
                     style={({ pressed }) => ({ opacity: pressed ? 0.85 : s.is_closed && !booked ? 0.45 : 1 })}
                   >
                     <Card>
