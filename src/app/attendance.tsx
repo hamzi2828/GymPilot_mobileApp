@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill, Stat } from "@/components/ui";
 import { usePalette } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -36,10 +36,13 @@ export default function Attendance() {
 
   return (
     <Screen title="Your visits" refreshing={attendance.refreshing} onRefresh={attendance.reload}>
-      {closed.message ? <GymClosed message={closed.message} /> : attendance.error ? <Notice tone="error">{attendance.error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} /> : attendance.error && data ? <Notice tone="error">{attendance.error}</Notice> : null}
 
       {closed.message ? null : attendance.loading && !data ? (
         <Loading />
+      ) : attendance.error && !data ? (
+        // Nothing arrived: say that, not "no visits recorded".
+        <LoadFailed message={attendance.error} onRetry={attendance.reload} />
       ) : (
         <>
           {summary ? (

@@ -4,11 +4,11 @@
 // when booking closes, whether a session costs a credit, what happens when
 // it is full. The app shows what it is told and reports back what it says.
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Caption, Card, Empty, GymClosed, Loading, Notice, Pill } from "@/components/ui";
+import { Body, Caption, Card, Empty, GymClosed, LoadFailed, Loading, Notice, Pill } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction } from "@/lib/confirm";
 import { dayLabel, timeRange } from "@/lib/format";
@@ -55,8 +55,8 @@ export default function Classes() {
     }
     // Sorted twice: the days in order, and the sessions inside a day in
     // clock order -- the API returns them class by class, not hour by hour.
-    for (const list of map.values()) list.sort((a, b) => a.start_time.localeCompare(b.start_time));
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+    for (const list of map.values()) list.sort((a, b) => String(a.start_time || "").localeCompare(String(b.start_time || "")));
+    return [...map.entries()].sort(([a], [b]) => String(a || "").localeCompare(String(b || "")));
   }, [visible]);
 
   const rules = timetable.data?.rules;
@@ -64,7 +64,15 @@ export default function Classes() {
 
   const keyOf = (s: Session) => `${s.class_id}-${s.date}-${s.start_time}`;
 
+  // One booking or cancellation at a time. `busyKey` says which card shows
+  // as working, but it only changes on the next draw and used to be cleared
+  // by whichever request finished first -- so the ref is what a second tap
+  // meets, from the first tap (the "are you sure?" included) to the answer.
+  const acting = useRef(false);
+
   const book = async (s: Session) => {
+    if (acting.current) return;
+    acting.current = true;
     setBusyKey(keyOf(s));
     setMessage(null);
     try {
@@ -88,12 +96,13 @@ export default function Classes() {
       if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not book that class." });
     } finally {
+      acting.current = false;
       setBusyKey(null);
     }
   };
 
   const cancel = async (s: Session) => {
-    if (!s.my_booking) return;
+    if (!s.my_booking || acting.current) return;
 
     // Inside the gym's cancellation window a cancel is a late one, and the
     // gym may keep the credit. The server decides that; the member is told
@@ -101,20 +110,21 @@ export default function Classes() {
     const hoursLeft = hoursUntil(s.starts_at);
     const late = cancelWindow > 0 && hoursLeft < cancelWindow && s.my_booking.status !== "waitlisted";
     const when = `${s.class_name}, ${dayLabel(s.date)} at ${s.start_time}`;
-    const sure = await confirmAction({
-      title: late ? "Cancel late?" : "Cancel this booking?",
-      message: late
-        ? `${when} ${hoursLeft <= 0 ? "has already started" : `starts in under ${cancelWindow} hours`}. Your gym counts this as a late cancellation${rules?.use_credits ? ", so the session credit may not come back" : ""}.`
-        : `${when}.`,
-      confirm: late ? "Cancel anyway" : "Cancel booking",
-      cancel: "Keep it",
-      destructive: true,
-    });
-    if (!sure) return;
-
-    setBusyKey(keyOf(s));
-    setMessage(null);
+    acting.current = true;
     try {
+      const sure = await confirmAction({
+        title: late ? "Cancel late?" : "Cancel this booking?",
+        message: late
+          ? `${when} ${hoursLeft <= 0 ? "has already started" : `starts in under ${cancelWindow} hours`}. Your gym counts this as a late cancellation${rules?.use_credits ? ", so the session credit may not come back" : ""}.`
+          : `${when}.`,
+        confirm: late ? "Cancel anyway" : "Cancel booking",
+        cancel: "Keep it",
+        destructive: true,
+      });
+      if (!sure) return;
+
+      setBusyKey(keyOf(s));
+      setMessage(null);
       const res = await api<{ message?: string }>(`/api/gymfolio/bookings/${s.my_booking.id}`, {
         method: "DELETE",
         session,
@@ -126,6 +136,7 @@ export default function Classes() {
       if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not cancel that booking." });
     } finally {
+      acting.current = false;
       setBusyKey(null);
     }
   };
@@ -170,10 +181,13 @@ export default function Classes() {
       </View>
 
       {message ? <Notice tone={message.tone === "ok" ? "ok" : "error"}>{message.text}</Notice> : null}
-      {timetable.error ? <Notice tone="error">{timetable.error}</Notice> : null}
+      {timetable.error && timetable.data ? <Notice tone="error">{timetable.error}</Notice> : null}
 
       {timetable.loading ? (
         <Loading label="Loading the timetable" />
+      ) : timetable.error && !timetable.data ? (
+        // The timetable never arrived: say that, not "no classes".
+        <LoadFailed message={timetable.error} onRetry={reload} />
       ) : days.length === 0 ? (
         <Empty
           title={onlyMine ? "You have not booked anything" : "No classes on the timetable"}
@@ -196,7 +210,7 @@ export default function Classes() {
                 return (
                   <Pressable
                     key={keyOf(s)}
-                    disabled={!actionable || busy}
+                    disabled={!actionable || busyKey !== null}
                     onPress={() => (booked ? cancel(s) : book(s))}
                     style={({ pressed }) => ({ opacity: pressed ? 0.85 : s.is_closed && !booked ? 0.45 : 1 })}
                   >

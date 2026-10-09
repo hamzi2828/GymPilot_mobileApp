@@ -1,6 +1,6 @@
 // Fetch something for the signed-in member: loading, error, pull to refresh,
-// and a reload when the screen comes back into focus. Every screen needs the
-// same four things, so none of them writes it out again.
+// and a quiet reload when the screen comes back into focus. Every screen
+// needs the same four things, so none of them writes it out again.
 //
 // The fetch hangs off focus rather than off mount. Focus fires on the first
 // mount too, so that is one code path instead of two -- and one request on
@@ -26,11 +26,27 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
   // array has to be a literal, so the list cannot be spread into it.
   const depKey = JSON.stringify(deps);
   // First time round the member sees a spinner; after that the screen already
-  // has something on it, so a refresh happens quietly underneath.
+  // has something on it.
   const loadedOnce = useRef(false);
+  // Which request is the latest. Answers come back in whatever order the
+  // network likes: tap two month chips quickly and the first month's visits
+  // can arrive after the second's. Only the latest request may touch the
+  // screen; an older one is dropped when it lands.
+  const latest = useRef(0);
+  // The query the last request was for, so that coming back to a screen can
+  // be told apart from asking it for something else.
+  const asked = useRef<string | null>(null);
+  const query = `${path}|${depKey}`;
 
+  // Three ways to ask, and what the member sees while waiting:
+  //   first  -- nothing on screen yet: the loading spinner
+  //   pull   -- they pulled down, or asked for something else (another
+  //             month): the pull-to-refresh spinner
+  //   quiet  -- the screen came back into focus: nothing, the new data just
+  //             replaces the old
   const run = useCallback(
-    async (isRefresh = false) => {
+    async (how: "first" | "pull" | "quiet") => {
+      const mine = ++latest.current;
       if (!path || !session) {
         // Nothing to ask for -- and nothing to wait for either, so no spinner
         // is left running over an empty screen.
@@ -38,21 +54,28 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
         setRefreshing(false);
         return;
       }
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+      asked.current = query;
+      if (how === "pull") setRefreshing(true);
+      else if (how === "first") setLoading(true);
       try {
-        setData(await api<T>(path, { session, onUnauthorised: signOut }));
+        const result = await api<T>(path, { session, onUnauthorised: signOut });
+        if (mine !== latest.current) return;
+        setData(result);
         setError(null);
         setErrorCode(null);
         setErrorStatus(null);
       } catch (e) {
+        if (mine !== latest.current) return;
         setError(e instanceof ApiError || e instanceof Error ? e.message : "Something went wrong.");
         setErrorCode(e instanceof ApiError ? e.code || null : null);
         setErrorStatus(e instanceof ApiError ? e.status : null);
       } finally {
-        loadedOnce.current = true;
-        setLoading(false);
-        setRefreshing(false);
+        // A newer request owns the spinners now, and will put them away.
+        if (mine === latest.current) {
+          loadedOnce.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,10 +83,12 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
   );
 
   // Opening the screen loads it; coming back from booking a class shows the
-  // class booked; changing what the query depends on re-runs it.
+  // class booked, without a spinner; changing what the query depends on
+  // re-runs it.
   useFocusEffect(
     useCallback(() => {
-      run(loadedOnce.current);
+      run(!loadedOnce.current ? "first" : asked.current === query ? "quiet" : "pull");
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [run])
   );
 
@@ -76,7 +101,7 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
     closed: isGymClosed(errorStatus, errorCode),
     loading,
     refreshing,
-    reload: () => run(true),
+    reload: () => run("pull"),
   };
 }
 

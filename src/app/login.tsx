@@ -39,7 +39,10 @@ export default function Login() {
   const [challenge, setChallenge] = useState<{ id: string; gymSlug: string } | null>(null);
   const [code, setCode] = useState("");
 
+  // The buttons go grey while a request is out, but the keyboard's own "go"
+  // key does not: both steps refuse a second run until the first has answered.
   const submit = async () => {
+    if (busy) return;
     if (!username.trim() || !password) {
       setError("Enter the username and password your gym gave you.");
       return;
@@ -73,7 +76,7 @@ export default function Login() {
   };
 
   const verify = async () => {
-    if (!challenge) return;
+    if (!challenge || busy) return;
     const digits = code.replace(/\D/g, "");
     if (digits.length !== 6) {
       setError("Enter the 6-digit code from your email.");

@@ -273,7 +273,7 @@ them.
 ```
 src/
   app/                    expo-router: the file tree is the navigation
-    _layout.tsx           session provider, stack, status bar, notification taps
+    _layout.tsx           session provider, stack, status bar, notification taps, and the "Something went wrong · Try again" screen for a crash
     index.tsx             signed in? → tabs, otherwise → login
     login.tsx             username + password, the 2FA code step, no sign-up
     forgot.tsx            username → reset link by email
@@ -293,7 +293,7 @@ src/
     theme.ts              six tokens → a full palette
     types.ts              the shapes the API actually returns
     format.ts             money, dates, durations
-    useLoad.ts            loading / error / refresh, reloaded on focus
+    useLoad.ts            loading / error / pull to refresh, reloaded quietly on focus, only the latest answer kept
     storage.ts            SecureStore on a device, localStorage on web
     checkinCode.ts        the last check-in code, kept for when there is no signal
     config.ts             EXPO_PUBLIC_API_URL, and whether this build has a real one; the privacy and terms addresses

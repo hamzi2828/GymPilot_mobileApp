@@ -11,7 +11,9 @@ export function money(amount: number | string, currency: string): string {
   }
 }
 
-export function dayLabel(iso: string): string {
+export function dayLabel(iso: string | null | undefined): string {
+  // A date the server left out is a blank, not a crash.
+  if (!iso) return "";
   const date = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });

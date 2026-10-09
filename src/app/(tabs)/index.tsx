@@ -4,12 +4,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
 import { dayLabel, longDate, money, relativeDays, timeRange } from "@/lib/format";
 import { awaitingPayment, balanceOwing, currentMembership, endDateLabel, isLive, SITE_ACCOUNT_HISTORY, SITE_PACKAGES, statusPill } from "@/lib/membership";
+import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -40,7 +40,7 @@ export default function Home() {
   const owing = (memberships.data?.data || []).filter(isLive).reduce((sum, o) => sum + balanceOwing(o), 0);
   const siteUrl = branding?.siteUrl || "";
   const openSite = (path: string) => {
-    if (siteUrl) WebBrowser.openBrowserAsync(`${siteUrl}${path}`);
+    if (siteUrl) openWeb(webAddress(siteUrl, path));
   };
   // The clock, read when the screen opens rather than on every render.
   const [openedAt, setOpenedAt] = useState(0);
@@ -56,7 +56,7 @@ export default function Home() {
     () =>
       (timetable.data?.data || [])
         .filter((s) => s.my_booking && s.my_booking.status !== "cancelled" && new Date(s.starts_at).getTime() >= openedAt)
-        .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+        .sort((a, b) => String(a.starts_at || "").localeCompare(String(b.starts_at || "")))
         .slice(0, 3),
     [timetable.data, openedAt]
   );
@@ -255,14 +255,14 @@ export default function Home() {
 function AnnouncementCard({ announcement: a, siteUrl }: { announcement: Announcement; siteUrl: string }) {
   const p = usePalette();
   const colour = a.tone === "warning" ? p.warning : a.tone === "success" ? p.success : p.accent;
-  const href = !a.url ? "" : /^https?:\/\//i.test(a.url) ? a.url : siteUrl ? `${siteUrl}${a.url.startsWith("/") ? "" : "/"}${a.url}` : "";
+  const href = !a.url ? "" : /^https?:\/\//i.test(a.url) ? a.url : webAddress(siteUrl, a.url);
 
   return (
     <Card style={{ marginBottom: space.lg, borderColor: `${colour}66` }}>
       <Body style={{ fontWeight: "700", color: colour }}>{a.title}</Body>
       {a.body ? <Body style={{ marginTop: 4, fontSize: 14 }}>{a.body}</Body> : null}
       {href ? (
-        <Pressable onPress={() => WebBrowser.openBrowserAsync(href)} hitSlop={8} style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
+        <Pressable onPress={() => openWeb(href)} hitSlop={8} accessibilityRole="link" style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
           <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>{a.url_label || "Read more"} ›</Body>
         </Pressable>
       ) : null}

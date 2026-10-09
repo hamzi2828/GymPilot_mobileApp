@@ -178,6 +178,21 @@ export function Notice({ tone, children }: { tone: "error" | "ok" | "warn"; chil
 }
 
 /**
+ * A screen that could not load anything at all: what went wrong, and a way
+ * to ask again. Shown instead of the screen's empty state -- "no classes on
+ * the timetable" is a different thing from "could not fetch the timetable",
+ * and telling a member the first when the second happened sends them away.
+ */
+export function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <>
+      <Notice tone="error">{message}</Notice>
+      <Button label="Try again" variant="secondary" onPress={onRetry} />
+    </>
+  );
+}
+
+/**
  * The whole gym is closed to its members right now (see useGymClosed): said
  * once, in place of the screen, with a way out. The reason is the server's.
  */

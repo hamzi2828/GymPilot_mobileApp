@@ -6,7 +6,7 @@ import React, { useMemo } from "react";
 import { View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Empty, GymClosed, Loading, Notice, Pill, Stat } from "@/components/ui";
+import { Body, Button, Caption, Card, Empty, GymClosed, LoadFailed, Loading, Notice, Pill, Stat } from "@/components/ui";
 import { dayLabel, timeRange } from "@/lib/format";
 import { space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -28,7 +28,7 @@ function statusOf(b: BookingRecord): { label: string; tone: Tone } {
     case "booked":
       return { label: "booked", tone: "neutral" };
     default:
-      return { label: b.status.replace(/_/g, " "), tone: "neutral" };
+      return { label: String(b.status || "").replace(/_/g, " "), tone: "neutral" };
   }
 }
 
@@ -47,10 +47,13 @@ export default function Bookings() {
 
   return (
     <Screen title="Your bookings" subtitle="Classes you booked before today" refreshing={history.refreshing} onRefresh={history.reload}>
-      {closed.message ? <GymClosed message={closed.message} /> : history.error ? <Notice tone="error">{history.error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} /> : history.error && history.data ? <Notice tone="error">{history.error}</Notice> : null}
 
       {closed.message ? null : history.loading && !history.data ? (
         <Loading />
+      ) : history.error && !history.data ? (
+        // The list never arrived: say that, not "no past bookings".
+        <LoadFailed message={history.error} onRetry={history.reload} />
       ) : rows.length === 0 ? (
         <Empty title="No past bookings" hint="Once you have been to a class, it shows up here." />
       ) : (

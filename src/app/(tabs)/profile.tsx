@@ -5,15 +5,15 @@
 // the app stores require of an app with sign-in.
 
 import React, { useEffect, useState } from "react";
-import { Linking, Pressable, Switch, View } from "react-native";
+import { Pressable, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
-import * as WebBrowser from "expo-web-browser";
 import { GymMark, Screen } from "@/components/Screen";
 import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, Title } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
+import { openApp, openWeb } from "@/lib/open";
 import { pushSupported } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
@@ -102,9 +102,14 @@ export default function Profile() {
   const copyUsername = async () => {
     const username = me?.username || user?.username;
     if (!username) return;
-    await Clipboard.setStringAsync(username);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await Clipboard.setStringAsync(username);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // The phone would not take it; it is on the screen to copy by hand.
+      await tellMember("Could not copy that", `Your username is ${username}.`);
+    }
   };
 
   // Whether the email box now says something other than what the gym has.
@@ -112,6 +117,7 @@ export default function Profile() {
   const emailChanged = form.email.trim().toLowerCase() !== (me?.email || "").trim().toLowerCase();
 
   const save = async () => {
+    if (busy) return;
     const email = form.email.trim();
     const body = {
       firstName: form.firstName.trim(),
@@ -149,6 +155,7 @@ export default function Profile() {
   };
 
   const changePassword = async () => {
+    if (busy) return;
     if (passwords.newPassword.length < MIN_PASSWORD) {
       setPasswordError(`Your new password needs at least ${MIN_PASSWORD} characters.`);
       return;
@@ -414,23 +421,37 @@ export default function Profile() {
           <GymMark size={28} />
         </View>
         {phone ? (
-          <Pressable onPress={() => Linking.openURL(`tel:${phone}`)}>
+          <Pressable
+            onPress={() => openApp(`tel:${phone.replace(/[^\d+]/g, "")}`, `This phone cannot make calls. Your gym's number is ${phone}.`)}
+            accessibilityRole="link"
+            accessibilityLabel={`Call your gym on ${phone}`}
+          >
             <Line label="Phone" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{phone}</Body>} />
           </Pressable>
         ) : null}
         {email ? (
-          <Pressable onPress={() => Linking.openURL(`mailto:${email}`)}>
+          <Pressable
+            onPress={() => openApp(`mailto:${email}`, `There is no email app set up on this phone. Your gym's address is ${email}.`)}
+            accessibilityRole="link"
+            accessibilityLabel={`Email your gym at ${email}`}
+          >
             <Line label="Email" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{email}</Body>} />
           </Pressable>
         ) : null}
         {contact?.address ? <Line label="Address" value={contact.address} /> : null}
         {branding?.whatsapp ? (
-          <Pressable onPress={() => Linking.openURL(`https://wa.me/${branding.whatsapp.replace(/[^0-9]/g, "")}`)}>
+          <Pressable
+            onPress={() =>
+              openApp(`https://wa.me/${branding.whatsapp.replace(/[^0-9]/g, "")}`, `WhatsApp could not be opened on this phone. Your gym's WhatsApp number is ${branding.whatsapp}.`)
+            }
+            accessibilityRole="link"
+            accessibilityLabel="Message your gym on WhatsApp"
+          >
             <Line label="WhatsApp" value={<Body style={{ color: p.accent, fontWeight: "600" }}>Message the gym</Body>} />
           </Pressable>
         ) : null}
         {siteUrl ? (
-          <Pressable onPress={() => WebBrowser.openBrowserAsync(siteUrl)}>
+          <Pressable onPress={() => openWeb(siteUrl)} accessibilityRole="link" accessibilityLabel="Open your gym's website">
             <Line label="Website" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{siteUrl.replace(/^https?:\/\//, "")}</Body>} />
           </Pressable>
         ) : null}

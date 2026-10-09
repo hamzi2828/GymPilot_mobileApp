@@ -20,11 +20,10 @@
 // live one. A bank transfer still waiting is shown on its own, and a card
 // checkout that was never paid is not shown at all.
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pressable, View } from "react-native";
-import * as WebBrowser from "expo-web-browser";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction } from "@/lib/confirm";
 import { longDate, money, relativeDays } from "@/lib/format";
@@ -42,6 +41,7 @@ import {
   startsLater,
   statusPill,
 } from "@/lib/membership";
+import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -96,23 +96,30 @@ export default function Membership() {
 
   const siteUrl = branding?.siteUrl || "";
   const openSite = (path: string) => {
-    if (siteUrl) WebBrowser.openBrowserAsync(`${siteUrl}${path}`);
+    if (siteUrl) openWeb(webAddress(siteUrl, path));
   };
 
+  // One thing at a time: from the first tap -- the "are you sure?" included
+  // -- until the server has answered, every other action waits. `busy` only
+  // changes on the next draw, so the ref is what a quick second tap meets.
+  const acting = useRef(false);
+
   const act = async (label: string, path: string, body?: unknown, confirmText?: string) => {
-    if (confirmText) {
-      const sure = await confirmAction({
-        title: label,
-        message: confirmText,
-        confirm: label,
-        cancel: "Not now",
-        destructive: label.toLowerCase().startsWith("cancel"),
-      });
-      if (!sure) return;
-    }
-    setBusy(label);
-    setMessage(null);
+    if (acting.current) return;
+    acting.current = true;
     try {
+      if (confirmText) {
+        const sure = await confirmAction({
+          title: label,
+          message: confirmText,
+          confirm: label,
+          cancel: "Not now",
+          destructive: label.toLowerCase().startsWith("cancel"),
+        });
+        if (!sure) return;
+      }
+      setBusy(label);
+      setMessage(null);
       const res = await api<{ message?: string }>(path, { method: "POST", session, onUnauthorised: signOut, body });
       setMessage({ tone: "ok", text: res.message || "Done." });
       orders.reload();
@@ -121,6 +128,7 @@ export default function Membership() {
       const refused = e instanceof ApiError && e.code ? PAUSE_REFUSED[e.code] : undefined;
       setMessage({ tone: "error", text: refused || (e instanceof ApiError || e instanceof Error ? e.message : "That did not work.") });
     } finally {
+      acting.current = false;
       setBusy(null);
     }
   };
@@ -223,15 +231,19 @@ export default function Membership() {
   return (
     <Screen title="Membership" refreshing={orders.refreshing} onRefresh={reload}>
       {message ? <Notice tone={message.tone === "ok" ? "ok" : "error"}>{message.text}</Notice> : null}
-      {orders.error ? <Notice tone="error">{orders.error}</Notice> : null}
+      {orders.error && orders.data ? <Notice tone="error">{orders.error}</Notice> : null}
 
       {orders.loading ? (
         <Loading />
+      ) : orders.error && !orders.data ? (
+        // The list never arrived: that is the truth, not "no membership".
+        <View style={{ marginBottom: space.xl }}>
+          <LoadFailed message={orders.error} onRetry={reload} />
+        </View>
       ) : !current ? (
         // Nothing live. A transfer still waiting says so below; otherwise say
-        // plainly there is no membership (unless the list never arrived, in
-        // which case the error above is the truth) and where to get one.
-        waiting.length > 0 || (orders.error && !orders.data) ? null : (
+        // plainly there is no membership and where to get one.
+        waiting.length > 0 ? null : (
           <>
             <Empty
               title={past.length > 0 ? "Your membership has ended" : "You do not have a membership yet"}
@@ -330,6 +342,7 @@ export default function Membership() {
                 label="Start my membership again"
                 variant="secondary"
                 busy={busy === "Start my membership again"}
+                disabled={!!busy}
                 onPress={() => act("Start my membership again", `/api/gymfolio/package-orders/${current._id}/unfreeze`)}
               />
             ) : r?.allowMemberFreeze ? (
@@ -358,7 +371,7 @@ export default function Membership() {
                   <Button label="Never mind" variant="quiet" onPress={() => setPausing(false)} style={{ marginTop: space.sm }} />
                 </Card>
               ) : (
-                <Button label="Pause my membership" variant="secondary" busy={busy === "Pause my membership"} onPress={() => setPausing(true)} />
+                <Button label="Pause my membership" variant="secondary" busy={busy === "Pause my membership"} disabled={!!busy} onPress={() => setPausing(true)} />
               )
             ) : null}
 
@@ -367,6 +380,7 @@ export default function Membership() {
                 label="Keep my membership"
                 variant="secondary"
                 busy={busy === "Keep my membership"}
+                disabled={!!busy}
                 onPress={() => act("Keep my membership", `/api/gymfolio/package-orders/${current._id}/resume`)}
               />
             ) : r?.allowMemberCancel ? (
@@ -374,6 +388,7 @@ export default function Membership() {
                 label="Cancel my membership"
                 variant="danger"
                 busy={busy === "Cancel my membership"}
+                disabled={!!busy}
                 onPress={() =>
                   act(
                     "Cancel my membership",
