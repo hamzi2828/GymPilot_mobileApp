@@ -46,6 +46,15 @@ export async function openWeb(url: string): Promise<void> {
   }
 }
 
+/** This app's page in the phone's own settings, where notifications are switched on. */
+export async function openPhoneSettings(): Promise<void> {
+  try {
+    await Linking.openSettings();
+  } catch {
+    await tellMember("Could not open settings", "Open your phone's Settings, find this app, and switch notifications on there.");
+  }
+}
+
 /**
  * Another app, by its link (tel:, mailto:, https://wa.me/...). `otherwise`
  * is what the member is told when this phone has nothing to open it with.

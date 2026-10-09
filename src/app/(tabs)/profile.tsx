@@ -13,8 +13,8 @@ import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalL
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
-import { openApp, openWeb } from "@/lib/open";
-import { pushSupported } from "@/lib/push";
+import { openApp, openPhoneSettings, openWeb } from "@/lib/open";
+import { pushSupported, registerForPush, usePushState } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -271,6 +271,7 @@ export default function Profile() {
   const prefs: NotificationPreferences | null = settings ? { ...settings.preferences, ...flipped } : null;
   const channels = settings?.channels;
   const canPush = pushSupported();
+  const pushState = usePushState();
 
   const preferenceRow = (key: keyof NotificationPreferences, label: string, hint?: string) =>
     prefs ? (
@@ -286,6 +287,53 @@ export default function Profile() {
           trackColor={{ true: p.accent, false: p.border }}
           thumbColor="#ffffff"
           accessibilityLabel={label}
+        />
+      </View>
+    ) : null;
+
+  // "On this phone" is two things at once: the member's preference, which
+  // the server keeps, and whether the gym can reach this phone at all, which
+  // only the phone knows (lib/push). The switch is on only when both are --
+  // a phone that refused permission, or could not be registered, must not
+  // look as if it will buzz. Switching it on tries the registration again.
+  const pushOn = canPush && pushState === "on" && !!prefs?.push;
+  const togglePush = async (value: boolean) => {
+    if (!value) return setPreference("push", false);
+    if (pushState !== "on") {
+      if (!session) return;
+      setSavingPref("push");
+      const now = await registerForPush(session).catch(() => "failed" as const);
+      setSavingPref(null);
+      // Still not reachable: the row's own words say why, and what to do.
+      if (now !== "on") return;
+    }
+    if (!prefs?.push) await setPreference("push", true);
+  };
+  const pushRow = () =>
+    prefs ? (
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6, gap: space.lg }}>
+        <View style={{ flex: 1 }}>
+          <Body style={{ fontSize: 14 }}>On this phone</Body>
+          {!canPush ? (
+            <Caption>Needs the app from the store, on a real phone.</Caption>
+          ) : pushState === "blocked" ? (
+            <>
+              <Caption>Notifications are switched off for this app in your phone&apos;s settings. Switch them on there, then switch this on.</Caption>
+              <Pressable onPress={openPhoneSettings} hitSlop={8} accessibilityRole="link" style={{ marginTop: 4, alignSelf: "flex-start" }}>
+                <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>Open phone settings ›</Body>
+              </Pressable>
+            </>
+          ) : pushState === "failed" ? (
+            <Caption>Notifications could not be set up on this phone. Switch this on to try again.</Caption>
+          ) : null}
+        </View>
+        <Switch
+          value={pushOn}
+          onValueChange={togglePush}
+          disabled={!canPush || savingPref === "push"}
+          trackColor={{ true: p.accent, false: p.border }}
+          thumbColor="#ffffff"
+          accessibilityLabel="Notifications on this phone"
         />
       </View>
     ) : null;
@@ -405,7 +453,7 @@ export default function Profile() {
           <Caption>{notifications.error}</Caption>
         ) : (
           <>
-            {preferenceRow("push", "On this phone", canPush ? undefined : "Needs the app from the store, on a real phone.")}
+            {pushRow()}
             {preferenceRow("email", "By email")}
             {channels?.sms ? preferenceRow("sms", "By text message") : null}
             {channels?.whatsapp ? preferenceRow("whatsapp", "On WhatsApp") : null}

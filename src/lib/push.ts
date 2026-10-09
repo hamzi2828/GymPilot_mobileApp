@@ -12,7 +12,7 @@
 // token is minted against that id, so until `eas init` has run there is
 // nothing to register. See the README.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
@@ -96,46 +96,99 @@ if (Platform.OS !== "web") {
   });
 }
 
+// Whether the gym can actually reach THIS phone, as far as this launch knows.
+// The member's "notify me on my phone" preference lives on the server and
+// says nothing about that: permission may have been refused, or the phone
+// may have failed to get a push token (an Android build without its Firebase
+// file cannot). Profile shows its switch as on only when this says "on".
+//
+//   unknown  -- not tried yet, or still being set up
+//   on       -- registered with the gym
+//   blocked  -- the member has notifications switched off for the app
+//   failed   -- no token, or the gym's server could not be told
+export type PushState = "unknown" | "on" | "blocked" | "failed";
+
+let pushState: PushState = "unknown";
+const watchers = new Set<() => void>();
+
+function setPushState(next: PushState): void {
+  if (pushState === next) return;
+  pushState = next;
+  watchers.forEach((tell) => tell());
+}
+
+/** The state above, kept up to date on whichever screen asks. */
+export function usePushState(): PushState {
+  return useSyncExternalStore(
+    (tell) => {
+      watchers.add(tell);
+      return () => watchers.delete(tell);
+    },
+    () => pushState,
+    () => pushState
+  );
+}
+
 /**
  * Asks for permission if it has not been given, then registers this phone
  * with the gym. Safe to call on every launch: the server keeps one row per
- * token and simply refreshes it.
+ * token and simply refreshes it. Resolves to how it ended; a failure is
+ * recorded (see usePushState) and thrown.
  */
-export async function registerForPush(session: Session): Promise<void> {
+export async function registerForPush(session: Session): Promise<PushState> {
   const id = projectId();
-  if (!id || !pushSupported()) return;
+  if (!id || !pushSupported()) return pushState;
 
-  let { granted } = await Notifications.getPermissionsAsync();
-  if (!granted) {
-    ({ granted } = await Notifications.requestPermissionsAsync());
+  try {
+    let { granted } = await Notifications.getPermissionsAsync();
+    if (!granted) {
+      ({ granted } = await Notifications.requestPermissionsAsync());
+    }
+    if (!granted) {
+      setPushState("blocked");
+      return "blocked";
+    }
+
+    if (Platform.OS === "android") {
+      // Android needs a channel before anything can be shown at all.
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Your gym",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id });
+
+    // Whatever this phone was registered as before -- with another gym, or
+    // under a token that has since rotated -- comes off first, so the phone
+    // never hears from two gyms at once.
+    const before = registered || (await storedRegistration());
+    if (before && (before.token !== token || before.gymSlug !== session.gymSlug)) {
+      if (await release(before)) await forget(before);
+    }
+
+    try {
+      await api("/api/mobile/push/register", {
+        method: "POST",
+        session,
+        body: { token, platform: Platform.OS, deviceName: Device.deviceName || Device.modelName || "" },
+      });
+    } catch (e) {
+      // The gym already has this very token from an earlier launch, and all
+      // that failed was reaching it to say so again (no signal, a server
+      // having a bad moment): the phone is still on its list.
+      const known = !!before && before.token === token && before.gymSlug === session.gymSlug;
+      const unreachable = e instanceof ApiError && (e.status === 0 || e.status >= 500);
+      if (!(known && unreachable)) throw e;
+    }
+    registered = { token, gymSlug: session.gymSlug };
+    await setItem(PUSH_KEY, JSON.stringify(registered));
+    setPushState("on");
+    return "on";
+  } catch (e) {
+    setPushState("failed");
+    throw e;
   }
-  if (!granted) return;
-
-  if (Platform.OS === "android") {
-    // Android needs a channel before anything can be shown at all.
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "Your gym",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
-
-  const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id });
-
-  // Whatever this phone was registered as before -- with another gym, or
-  // under a token that has since rotated -- comes off first, so the phone
-  // never hears from two gyms at once.
-  const before = registered || (await storedRegistration());
-  if (before && (before.token !== token || before.gymSlug !== session.gymSlug)) {
-    if (await release(before)) await forget(before);
-  }
-
-  await api("/api/mobile/push/register", {
-    method: "POST",
-    session,
-    body: { token, platform: Platform.OS, deviceName: Device.deviceName || Device.modelName || "" },
-  });
-  registered = { token, gymSlug: session.gymSlug };
-  await setItem(PUSH_KEY, JSON.stringify(registered));
 }
 
 /**
@@ -145,6 +198,7 @@ export async function registerForPush(session: Session): Promise<void> {
  * and is tried again next time.
  */
 export async function unregisterPush(): Promise<void> {
+  setPushState("unknown");
   const r = registered || (await storedRegistration());
   registered = null;
   if (!r) return;

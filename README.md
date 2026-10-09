@@ -178,12 +178,20 @@ gym's website address (`data.url`); the app reads its path and `?tab=`:
 opens the app. A tap that launched the app waits for the stored session, and a
 tap while nobody is signed in goes nowhere.
 
-Nothing is registered on the web build, on a simulator, or in a build whose
-`app.json` still carries the `REPLACE_WITH_EAS_PROJECT_ID` placeholder (the
-token is minted against the EAS project id — see **Building for the stores**).
+Nothing is registered on the web build or on a simulator. The token is minted
+against the EAS project id in `app.json` (`extra.eas.projectId`, already set),
+and on Android only once the build carries Firebase's `google-services.json` —
+see **Building for the stores**.
+
 Members switch channels on and off under **Profile → Notifications**
 (`GET`/`PUT /user/notification-preferences`); announcements the gym puts up
-(`GET /announcements/active`) appear at the top of Home.
+(`GET /announcements/active`) appear at the top of Home. The **On this phone**
+switch is on only when the member's preference is on *and* this phone is
+really registered with the gym (`usePushState` in `src/lib/push.ts`). If the
+member refused permission, the row says so and links to the phone's settings;
+if no push token could be had (an Android build without the Firebase file,
+say) it says notifications could not be set up, and switching it on tries
+again. It never shows on for a phone the gym cannot reach.
 
 ---
 
@@ -223,48 +231,69 @@ message rather than a spinner for good.
 
 ## Building for the stores
 
-The identifiers are set: `app.gympilot.member` for both the iOS bundle id and
-the Android package, phones only on iOS. `eas.json` carries three profiles —
-`development` (dev client, internal), `preview` (internal, an installable APK
-on Android) and `production` (auto-incremented build numbers) — each with its
-own `EXPO_PUBLIC_API_URL`. `preview` and `production` point at the live API,
-`https://gympilot-backend.vercel.app`. The app is linked to the EAS project
-`@hamzahashmi640/gympilot`, so steps 2 and 3 are done for this app.
+Already set, nothing to do:
+
+- **Identifiers.** `app.gympilot.member` is both the iOS bundle id and the
+  Android package; phones only on iOS.
+- **EAS project.** The app is linked to `@hamzahashmi640/gympilot`
+  (`extra.eas.projectId` in `app.json`).
+- **Build profiles.** `eas.json` carries `development` (dev client, internal),
+  `preview` (internal, an installable APK on Android) and `production`
+  (auto-incremented build numbers). Each sets `EXPO_PUBLIC_API_URL` and
+  `EXPO_PUBLIC_SITE_URL`; `preview` and `production` point at the live API,
+  `https://gympilot-backend.vercel.app`, and the live site,
+  `https://gympilot-marketing.vercel.app`. Change them there if either moves
+  (no trailing slash); `development` wants your machine's LAN address.
+- **Icons and splash.** Under `assets/images`, GymPilot's own mark, rasterised
+  from `GymPilot_frontendAdmin/src/app/icon.svg`: `icon.png` (1024, full bleed,
+  no transparency) for both stores, the three `android-icon-*` layers for
+  Android's adaptive icon, `splash-icon.png` on the app's black, and
+  `notification-icon.png` (white on transparent) for Android's status bar. To
+  change the mark, export the same sizes over these files.
+- **Store declarations.** The app is always dark (`userInterfaceStyle`).
+  Android asks for no storage permissions (`android.blockedPermissions`); iOS
+  declares that it uses no encryption beyond HTTPS
+  (`ios.config.usesNonExemptEncryption: false`), so App Store Connect does not
+  ask at every upload. Secure Store is configured without a Face ID prompt,
+  which the app never uses.
+
+What only the owner can do:
 
 1. `npm install -g eas-cli && eas login`
-2. **Server address.** In `eas.json`, set `build.preview.env.EXPO_PUBLIC_API_URL`
-   and `build.production.env.EXPO_PUBLIC_API_URL` to your GymPilot backend's
-   public `https://` address (no trailing slash), and
-   `build.development.env.EXPO_PUBLIC_API_URL` to your machine's LAN address.
-   Left at `https://api.example.com`, the build installs but cannot sign
-   anyone in (see **Running it**).
-3. **EAS project.** `eas init` — links the app to an EAS project and writes the
-   real `extra.eas.projectId` into `app.json` in place of
-   `REPLACE_WITH_EAS_PROJECT_ID`. Push tokens cannot be issued without it; until
-   then the app registers nothing.
-4. **Android push (FCM).** In the Firebase console, create a project (or use
-   yours), add an Android app with the package `app.gympilot.member`, and
-   download its `google-services.json` into this folder. Point the app at it in
-   `app.json`, under `expo.android`: `"googleServicesFile": "./google-services.json"`.
-   Then, in Firebase → Project settings → Service accounts, generate a private
-   key and upload it with `eas credentials` → Android → production → Google
-   Service Account → *FCM V1*. The key is stored on EAS; never commit it.
-5. **iOS push (APNs).** `eas credentials` → iOS, or the first `eas build`,
-   offers to create the APNs key and stores it on EAS.
-6. **Server side.** Nothing is needed for plain Expo push. If you switch on
+2. **Android push (Firebase).** Android will not give the app a push token
+   without this, and until then **Profile → Notifications → On this phone**
+   stays off on Android with "could not be set up".
+   1. In the [Firebase console](https://console.firebase.google.com), create a
+      project (or use yours) and add an Android app with the package name
+      `app.gympilot.member`.
+   2. Download its `google-services.json` and put it in this folder, next to
+      `app.json`. Nothing else needs editing: `app.config.js` names the file in
+      the build as soon as it exists, and leaves it out while it does not (a
+      missing file named in `app.json` would stop every Android build).
+   3. Get it to the build. EAS builds from what is committed, so either commit
+      the file, or keep it out of git and add it on expo.dev (the project →
+      Environment variables) as a *file* variable named `GOOGLE_SERVICES_JSON`
+      for the `preview` and `production` environments; `app.config.js` reads
+      that name.
+   4. In Firebase → Project settings → Service accounts, generate a private
+      key, and upload it with `eas credentials` → Android → production → Google
+      Service Account → *FCM V1*. The key is stored on EAS; never commit it.
+3. **iOS push (APNs).** Needs a paid Apple Developer account. `eas credentials`
+   → iOS, or the first `eas build`, offers to create the APNs key and stores it
+   on EAS.
+4. **Server side.** Nothing is needed for plain Expo push. If you switch on
    *enhanced push security* for the project on expo.dev, create an access token
    there and set it as `EXPO_ACCESS_TOKEN` in the backend's environment — the
    backend sends it with every push (`src/services/messaging.js`).
-7. `eas build --profile preview --platform all` for a build to hand to testers;
+5. `eas build --profile preview --platform all` for a build to hand to testers;
    `eas build --profile production --platform all` then `eas submit` for the
    stores.
-
-The icons and the splash image under `assets/images` are GymPilot's own mark,
-rasterised from `GymPilot_frontendAdmin/src/app/icon.svg`: `icon.png` (1024,
-full bleed, no transparency) for both stores, the three `android-icon-*` layers
-for Android's adaptive icon, and `splash-icon.png` on the app's black. To change
-the mark, export the same sizes over these files; `app.json` already points at
-them.
+6. **Store listings.** Both stores ask for a privacy policy address (the
+   site's `/privacy` page, which the app also links to), a support address,
+   screenshots, and a sign-in the reviewer can use: create a demo member at a
+   demo gym and give its username and password in the review notes, since the
+   app has no sign-up. Say in the notes that accounts are issued by gyms, and
+   that **Profile → Delete my account** deletes the account in the app.
 
 ---
 
