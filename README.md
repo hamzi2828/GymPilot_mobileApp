@@ -93,11 +93,22 @@ rather than an error under every section. Pulling down to refresh tries again.
 
 ### Deleting an account
 
-**Profile → Delete my account** asks first — and says that it does not cancel
-a membership that renews automatically — then calls `DELETE /user`. On success
-the phone is taken off the gym's push list and the app signs out. The server
-deletes the account and releases the username; the last active administrator
+**Profile → Delete my account** asks first — and says that a membership which
+renews by card is cancelled as part of it — then calls `DELETE /user`. On
+success the phone is taken off the gym's push list and the app signs out. The
+server stops the member's card subscriptions, deletes the account and releases
+the username. If the payment provider cannot be reached it deletes nothing and
+answers `409 { code: "SUBSCRIPTION_ACTIVE" }`; the app says the account was not
+deleted and to try again or ask the front desk. The last active administrator
 of a gym is refused, with the server's reason shown.
+
+### Members without an email address
+
+Many members have none: the desk creates the account and hands over a
+username. Nothing in the app needs one. In **Profile → Edit** the email is
+optional, and it is only sent to `PUT /update/user` when it was changed — then
+together with `currentPassword`, which the server requires for that one edit
+(`400` with `PASSWORD_REQUIRED` or `PASSWORD_INCORRECT`).
 
 ## How it gets the gym's look
 

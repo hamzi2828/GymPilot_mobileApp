@@ -29,6 +29,10 @@ const MIN_PASSWORD = 8;
  */
 function saveProblem(e: unknown): string {
   if (!(e instanceof ApiError)) return e instanceof Error ? e.message : "Could not save your details.";
+  // Changing the email address is the one edit the server wants the current
+  // password for: whoever holds the address can reset the password.
+  if (e.code === "PASSWORD_REQUIRED") return "Enter your current password to change your email address.";
+  if (e.code === "PASSWORD_INCORRECT") return "That password is not right, so nothing was changed. Check it and try again.";
   const detail = e.detail || "";
   if (/E11000|duplicate key/i.test(detail)) {
     return /email/i.test(detail)
@@ -63,7 +67,7 @@ export default function Profile() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", goals: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", goals: "", currentPassword: "" });
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
 
   // The switches show what the server has, plus whatever the member has just
@@ -81,6 +85,7 @@ export default function Profile() {
       email: me?.email || "",
       phone: me?.phone || "",
       goals: me?.goals || "",
+      currentPassword: "",
     });
     setMessage(null);
     setEditing(true);
@@ -102,21 +107,28 @@ export default function Profile() {
     setTimeout(() => setCopied(false), 1800);
   };
 
+  // Whether the email box now says something other than what the gym has.
+  // Only then is the address sent at all, and the current password with it.
+  const emailChanged = form.email.trim().toLowerCase() !== (me?.email || "").trim().toLowerCase();
+
   const save = async () => {
+    const email = form.email.trim();
     const body = {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
-      email: form.email.trim(),
       phone: form.phone.trim(),
       goals: form.goals.trim(),
+      ...(emailChanged ? { email, currentPassword: form.currentPassword } : {}),
     };
     // What the server would refuse anyway, said before the round trip.
     if (!body.firstName || !body.lastName) {
       setMessage({ tone: "error", text: "Your first and last name cannot be empty." });
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
-      setMessage({ tone: "error", text: "That does not look like an email address." });
+    // An email address is optional: plenty of members have none, and the gym
+    // signs them in by username. Only one that has been typed is checked.
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setMessage({ tone: "error", text: "That does not look like an email address. Leave it empty if you do not have one." });
       return;
     }
     setBusy(true);
@@ -201,15 +213,17 @@ export default function Profile() {
   };
 
   // Deleting the account is final: the server removes it and releases the
-  // username, so there is nothing to sign back in to. A membership is a
-  // separate thing the gym bills for, and deleting the account does not stop
-  // it -- the member is told so before they confirm.
+  // username, so there is nothing to sign back in to. A membership that
+  // renews by card is cancelled by the server as part of it -- nobody could
+  // sign in to stop it afterwards -- and the member is told so before they
+  // confirm. If the card company cannot be reached the server refuses (409
+  // SUBSCRIPTION_ACTIVE) and nothing is deleted.
   const deleteAccount = async () => {
     const sure = await confirmAction({
       title: "Delete your account?",
       message:
         `This permanently deletes your account at ${gymName || "your gym"} and your sign-in username. It cannot be undone.\n\n` +
-        "It does not cancel a membership that renews automatically: cancel that first on the Membership tab, or ask your gym.",
+        "If your membership renews by card, it is cancelled as part of this, so you will not be charged again.",
       confirm: "Delete my account",
       cancel: "Keep my account",
       destructive: true,
@@ -225,7 +239,15 @@ export default function Profile() {
       await tellMember("Account deleted", "Your account has been deleted.");
     } catch (e) {
       if (closed.caught(e)) return;
-      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not delete your account." });
+      setMessage({
+        tone: "error",
+        text:
+          e instanceof ApiError && e.code === "SUBSCRIPTION_ACTIVE"
+            ? "Your account has not been deleted. Your membership renews by card and it could not be cancelled just now. Please try again in a few minutes, or ask the front desk to cancel the membership first."
+            : e instanceof ApiError || e instanceof Error
+              ? e.message
+              : "Could not delete your account.",
+      });
     } finally {
       setDeleting(false);
     }
@@ -316,7 +338,27 @@ export default function Profile() {
           <Heading>Your details</Heading>
           <Field label="First name" value={form.firstName} onChangeText={(v) => setForm({ ...form, firstName: v })} />
           <Field label="Last name" value={form.lastName} onChangeText={(v) => setForm({ ...form, lastName: v })} />
-          <Field label="Email" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} autoCapitalize="none" keyboardType="email-address" />
+          <Field
+            label="Email (optional)"
+            value={form.email}
+            onChangeText={(v) => setForm({ ...form, email: v })}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            hint="Leave it empty if you do not have one. You sign in with your username either way."
+          />
+          {emailChanged ? (
+            <Field
+              label="Current password"
+              value={form.currentPassword}
+              onChangeText={(v) => setForm({ ...form, currentPassword: v })}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="current-password"
+              textContentType="password"
+              hint="Needed because you are changing your email address."
+            />
+          ) : null}
           <Field label="Phone" value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v })} keyboardType="phone-pad" />
           <Field
             label="What you are training for"
