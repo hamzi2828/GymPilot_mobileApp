@@ -16,7 +16,7 @@ import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GymPilotMark } from "@/components/icons";
+import { GymsPilotProMark } from "@/components/icons";
 import { Body, Button, Caption, Field, LegalLinks, Notice, Title } from "@/components/ui";
 import { API_CONFIGURED, API_HINT, NOT_CONFIGURED_MESSAGE } from "@/lib/config";
 import { usePalette, useSession } from "@/lib/session";
@@ -116,8 +116,8 @@ export default function Login() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ alignItems: "center", marginBottom: space.xxl }}>
-          <GymPilotMark />
-          <Title style={{ marginTop: space.lg }}>{challenge ? "Check your email" : "GymPilot"}</Title>
+          <GymsPilotProMark />
+          <Title style={{ marginTop: space.lg }}>{challenge ? "Check your email" : "GymsPilotPro"}</Title>
           <Caption style={{ marginTop: 6, textAlign: "center", fontSize: 14 }}>
             {challenge ? "Type the 6-digit code we sent you to finish signing in." : "Sign in with the username and password your gym gave you."}
           </Caption>

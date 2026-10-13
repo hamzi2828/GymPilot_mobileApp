@@ -106,7 +106,7 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
 }
 
 /**
- * "Your gym is closed to its members right now" -- suspended, its GymPilot
+ * "Your gym is closed to its members right now" -- suspended, its GymsPilotPro
  * subscription lapsed, or the member app switched off for it. Every request
  * fails the same way then, so a screen shows one notice (<GymClosed />) in
  * place of an error under every section.

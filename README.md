@@ -1,6 +1,6 @@
-# GymPilot — member app
+# GymsPilotPro — member app
 
-One app for every gym running on GymPilot. A member downloads it, signs in with
+One app for every gym running on GymsPilotPro. A member downloads it, signs in with
 the username and password their gym gave them, and from that moment the app is
 **their gym's** app: its logo, its colours, its timetable, its packages.
 
@@ -25,7 +25,7 @@ only way in is a username the gym issued.
 
 ## How it knows which gym
 
-GymPilot gives every gym its own database. The website knows which gym it is
+GymsPilotPro gives every gym its own database. The website knows which gym it is
 from its domain; an app cannot, so the **username** does that job instead.
 
 1. Every member gets a globally unique username when their account is created —
@@ -44,7 +44,7 @@ from its domain; an app cannot, so the **username** does that job instead.
 ### Which gyms get the app
 
 Sign-in also checks that the gym is entitled to the member app (the `member-app`
-add-on on its GymPilot plan or subscription; a gym on no plan gets everything).
+add-on on its GymsPilotPro plan or subscription; a gym on no plan gets everything).
 A gym without it answers `403 { code: "MEMBER_APP_NOT_INCLUDED" }` and the
 sign-in screen shows the server's message. The check runs after the password,
 so it cannot be used to find out which usernames exist.
@@ -221,7 +221,7 @@ address, or still on the `https://api.example.com` placeholder, shows "This app
 build isn't configured with a server address" on the sign-in screen and
 disables signing in, rather than failing as if the gym were offline.
 
-`EXPO_PUBLIC_SITE_URL` is GymPilot's own website (not a gym's). The sign-in
+`EXPO_PUBLIC_SITE_URL` is GymsPilotPro's own website (not a gym's). The sign-in
 screen and Profile link to its `/privacy` and `/terms` pages, which both stores
 require; they open in the in-app browser. Left out, the app uses
 `https://gympilot-marketing.vercel.app`.
@@ -250,7 +250,7 @@ Already set, nothing to do:
   `https://gympilot-backend.vercel.app`, and the live site,
   `https://gympilot-marketing.vercel.app`. Change them there if either moves
   (no trailing slash); `development` wants your machine's LAN address.
-- **Icons and splash.** Under `assets/images`, GymPilot's own mark, rasterised
+- **Icons and splash.** Under `assets/images`, GymsPilotPro's own mark, rasterised
   from `GymPilot_frontendAdmin/src/app/icon.svg`: `icon.png` (1024, full bleed,
   no transparency) for both stores, the three `android-icon-*` layers for
   Android's adaptive icon, `splash-icon.png` on the app's black, and

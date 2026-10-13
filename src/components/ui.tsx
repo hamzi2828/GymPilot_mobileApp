@@ -202,7 +202,7 @@ export function GymClosed({ message }: { message: string }) {
     <>
       <Notice tone="warn">{message}</Notice>
       <Body muted style={{ marginBottom: space.lg }}>
-        This is between your gym and GymPilot, not something you need to fix. Once it is sorted out, pull down to refresh and everything will be back.
+        This is between your gym and GymsPilotPro, not something you need to fix. Once it is sorted out, pull down to refresh and everything will be back.
       </Body>
       <Button label="Sign out" variant="secondary" onPress={() => signOut()} />
     </>
@@ -243,7 +243,7 @@ export function Line({ label, value }: { label: string; value: React.ReactNode }
 }
 
 /**
- * GymPilot's privacy policy and terms, opened over the app. On the sign-in
+ * GymsPilotPro's privacy policy and terms, opened over the app. On the sign-in
  * screen and in Profile: the stores ask for both to be reachable before and
  * after signing in.
  */

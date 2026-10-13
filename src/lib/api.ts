@@ -41,7 +41,7 @@ const SESSION_OVER = new Set(["TOKEN_MISSING", "TOKEN_INVALID", "TOKEN_WRONG_GYM
 export const SESSION_ENDED_MESSAGE = "Your session ended. Please sign in again.";
 
 // The server's names for "the whole gym is closed to its members right now":
-// suspended by the platform, its GymPilot subscription lapsed (which also
+// suspended by the platform, its GymsPilotPro subscription lapsed (which also
 // answers 402), or the member app switched off for it. Every request fails
 // the same way then, so screens say it once rather than under every section.
 const GYM_CLOSED = new Set(["TENANT_SUSPENDED", "SUBSCRIPTION_INACTIVE", "MEMBER_APP_NOT_INCLUDED"]);

@@ -625,7 +625,7 @@ export default function Profile() {
 
         <View style={{ alignItems: "center", marginTop: space.lg, gap: 2 }}>
           <Caption style={{ fontSize: 11 }}>{branding?.siteName || gymName}</Caption>
-          <Caption style={{ fontSize: 11 }}>Powered by GymPilot</Caption>
+          <Caption style={{ fontSize: 11 }}>Powered by GymsPilotPro</Caption>
         </View>
         <View style={{ marginTop: space.sm }}>
           <LegalLinks />

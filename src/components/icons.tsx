@@ -1,6 +1,6 @@
 // Four line icons for the tab bar, drawn rather than installed: a whole icon
 // pack for four glyphs is weight the member downloads for nothing. And the
-// GymPilot mark itself, for the one screen that is not yet any gym's.
+// GymsPilotPro mark itself, for the one screen that is not yet any gym's.
 
 import React from "react";
 import type { ColorValue } from "react-native";
@@ -61,12 +61,12 @@ export function QrIcon({ color, size = 24 }: Props) {
 }
 
 /**
- * GymPilot's own mark, the same drawing as the app icon and the website's.
+ * GymsPilotPro's own mark, the same drawing as the app icon and the website's.
  * Shown before sign-in, when the app does not yet know whose gym it is.
  */
-export function GymPilotMark({ size = 68 }: { size?: number }) {
+export function GymsPilotProMark({ size = 68 }: { size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 64 64" accessibilityRole="image" accessibilityLabel="GymPilot">
+    <Svg width={size} height={size} viewBox="0 0 64 64" accessibilityRole="image" accessibilityLabel="GymsPilotPro">
       <Defs>
         <LinearGradient id="gympilot-mark" x1="0" y1="0" x2="1" y2="1">
           <Stop offset="0" stopColor="#6366f1" />
