@@ -224,7 +224,7 @@ disables signing in, rather than failing as if the gym were offline.
 `EXPO_PUBLIC_SITE_URL` is GymsPilotPro's own website (not a gym's). The sign-in
 screen and Profile link to its `/privacy` and `/terms` pages, which both stores
 require; they open in the in-app browser. Left out, the app uses
-`https://gympilot-marketing.vercel.app`.
+`https://gymspilotpro.com`.
 
 ```bash
 npm run typecheck   # tsc --noEmit
@@ -247,11 +247,11 @@ Already set, nothing to do:
   `preview` (internal, an installable APK on Android) and `production`
   (auto-incremented build numbers). Each sets `EXPO_PUBLIC_API_URL` and
   `EXPO_PUBLIC_SITE_URL`; `preview` and `production` point at the live API,
-  `https://gympilot-backend.vercel.app`, and the live site,
-  `https://gympilot-marketing.vercel.app`. Change them there if either moves
+  `https://api.gymspilotpro.com`, and the live site,
+  `https://gymspilotpro.com`. Change them there if either moves
   (no trailing slash); `development` wants your machine's LAN address.
 - **Icons and splash.** Under `assets/images`, GymsPilotPro's own mark, rasterised
-  from `GymPilot_frontendAdmin/src/app/icon.svg`: `icon.png` (1024, full bleed,
+  from `GymPilot_marketing/src/app/icon.svg`: `icon.png` (1024, full bleed,
   no transparency) for both stores, the three `android-icon-*` layers for
   Android's adaptive icon, `splash-icon.png` on the app's black, and
   `notification-icon.png` (white on transparent) for Android's status bar. To
