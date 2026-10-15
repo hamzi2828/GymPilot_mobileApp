@@ -241,6 +241,8 @@ export interface MembershipOrder {
     stripeSubscriptionId?: string | null;
     /** Why the last charge failed, on a past-due membership. */
     lastPaymentError?: string;
+    /** A bank transfer receipt, and why staff did not accept it (status 'failed'). */
+    proof?: { rejectionReason?: string } | null;
   };
   invoice?: { number?: string } | null;
 }

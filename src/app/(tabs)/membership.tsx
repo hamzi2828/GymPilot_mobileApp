@@ -37,12 +37,14 @@ import {
   endDateLabel,
   endedMemberships,
   isLive,
+  rejectionMessage,
   renewsAutomatically,
   SITE_ACCOUNT_HISTORY,
   SITE_PACKAGES,
   siteBankTransfer,
   startsLater,
   statusPill,
+  transferRejected,
 } from "@/lib/membership";
 import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
@@ -88,6 +90,8 @@ export default function Membership() {
   // A session pack alongside the membership, or a renewal bought early.
   const alsoLive = list.filter((o) => o !== current && isLive(o));
   const waiting = awaitingPayment(list);
+  // Receipts staff turned down in the last month: the member needs to know why.
+  const notAccepted = list.filter((o) => transferRejected(o) && Date.now() - new Date(o.createdAt).getTime() < 30 * 86400000);
   const past = endedMemberships(list);
   const r = rules.data?.data;
 
@@ -195,21 +199,24 @@ export default function Membership() {
   const orderRow = (o: MembershipOrder) => {
     const pill = statusPill(o);
     const end = o.subscription?.endDate;
-    const when = !isLive(o)
-      ? end
-        ? `ended ${longDate(end)}`
-        : longDate(o.createdAt)
-      : startsLater(o)
-        ? `starts ${longDate(o.subscription?.startDate)}`
-        : end
-          ? `${endDateLabel(o).toLowerCase()} ${longDate(end)}`
-          : "";
+    const when = transferRejected(o)
+      ? `ordered ${longDate(o.createdAt)}`
+      : !isLive(o)
+        ? end
+          ? `ended ${longDate(end)}`
+          : longDate(o.createdAt)
+        : startsLater(o)
+          ? `starts ${longDate(o.subscription?.startDate)}`
+          : end
+            ? `${endDateLabel(o).toLowerCase()} ${longDate(end)}`
+            : "";
     return (
       <Card key={o._id}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
           <View style={{ flex: 1 }}>
             <Body style={{ fontWeight: "600" }}>{o.packageDetails?.name || o.orderNumber}</Body>
             {when ? <Caption style={{ marginTop: 2 }}>{when}</Caption> : null}
+            {transferRejected(o) ? <Caption style={{ marginTop: 2, color: p.danger }}>{rejectionMessage(o)}</Caption> : null}
             {balanceOwing(o) > 0 ? (
               <Caption style={{ marginTop: 2, color: p.warning }}>{money(balanceOwing(o), o.payment.currency)} still to pay at the front desk</Caption>
             ) : null}
@@ -453,6 +460,13 @@ export default function Membership() {
           </View>
         </>
       )}
+
+      {notAccepted.length > 0 ? (
+        <>
+          <Heading>Payment not accepted</Heading>
+          <View style={{ gap: space.sm, marginBottom: space.xl }}>{notAccepted.map(orderRow)}</View>
+        </>
+      ) : null}
 
       {waiting.length > 0 ? (
         <>

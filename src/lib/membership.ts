@@ -98,11 +98,23 @@ export function renewsAutomatically(o: MembershipOrder): boolean {
   );
 }
 
+/** Staff turned the bank transfer receipt down; the order is closed. */
+export function transferRejected(o: MembershipOrder): boolean {
+  return o.payment?.method === "bank_transfer" && o.payment?.status === "failed";
+}
+
+/** What to tell the member about a receipt staff did not accept, with their reason. */
+export function rejectionMessage(o: MembershipOrder): string {
+  const reason = (o.payment?.proof?.rejectionReason || "").trim().replace(/[.\s]+$/, "");
+  return `Payment not accepted${reason ? `: ${reason}` : ""}. Please contact the gym, or choose the package again and upload a new receipt.`;
+}
+
 /** What the member's own copy of the membership says it is, and how worried to look. */
 export function statusPill(o: MembershipOrder): { label: string; tone: "neutral" | "good" | "warn" | "bad" } {
   if (o.status === "frozen" || o.freeze?.isFrozen) return { label: "paused", tone: "warn" };
   if (o.status === "past_due") return { label: "payment failed", tone: "bad" };
   if (o.status === "active") return { label: "active", tone: "good" };
+  if (transferRejected(o)) return { label: "payment not accepted", tone: "bad" };
   if (o.payment?.status === "refunded") return { label: "refunded", tone: "neutral" };
   return { label: o.status, tone: o.status === "cancelled" ? "bad" : "neutral" };
 }

@@ -178,6 +178,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // ended the session. Not awaited: a sign-out must not wait on the
       // network, and one that cannot get through is retried later.
       void unregisterPush();
+      // A sign-out the member asked for ends the token on the server too,
+      // so a copy of it is no use to anybody. Not when the server ended the
+      // session itself (a reason is given): it would only be refused. Not
+      // awaited either, for the same reason as above.
+      const ending = storedRef.current;
+      if (!reason && ending) {
+        void api("/user/logout", { method: "POST", session: { token: ending.token, gymSlug: ending.gymSlug } }).catch(() => {});
+      }
       setSignOutReason(reason || null);
       // The saved check-in code goes with the session: it is the member's
       // way through the door, and must not outlive their sign-in here.
