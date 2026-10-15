@@ -9,7 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://192.168.1.20:4000",
-        "EXPO_PUBLIC_SITE_URL": "https://gympilot-marketing.vercel.app"
+        "EXPO_PUBLIC_SITE_URL": "https://gymspilotpro.com"
       }
     },
     "preview": {
@@ -18,15 +18,15 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://gympilot-backend.vercel.app",
-        "EXPO_PUBLIC_SITE_URL": "https://gympilot-marketing.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://api.gymspilotpro.com",
+        "EXPO_PUBLIC_SITE_URL": "https://gymspilotpro.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://gympilot-backend.vercel.app",
-        "EXPO_PUBLIC_SITE_URL": "https://gympilot-marketing.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://api.gymspilotpro.com",
+        "EXPO_PUBLIC_SITE_URL": "https://gymspilotpro.com"
       }
     }
   },

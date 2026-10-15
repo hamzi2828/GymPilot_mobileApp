@@ -38,7 +38,7 @@ export const API_HINT = __DEV__ ? `Trying ${API_URL}` : "";
 // .env or the build profile. Both stores require the two pages to be reachable
 // from inside the app, so a build that names no site still points at the live
 // one rather than shipping without them.
-const site = (process.env.EXPO_PUBLIC_SITE_URL || "").trim().replace(/\/+$/, "") || "https://gympilot-marketing.vercel.app";
+const site = (process.env.EXPO_PUBLIC_SITE_URL || "").trim().replace(/\/+$/, "") || "https://gymspilotpro.com";
 
 export const PRIVACY_URL = `${site}/privacy`;
 export const TERMS_URL = `${site}/terms`;
