@@ -1,12 +1,13 @@
 // The member's own details: who the gym has them down as, the username they
 // sign in with, their gym's contact details and opening hours, how they want
-// to hear from the gym, and the two things they can change -- their details
-// and their password. And the way out for good: deleting the account, which
-// the app stores require of an app with sign-in.
+// to hear from the gym, a card they saved for automatic payments (and turning
+// that off), and the two things they can change -- their details and their
+// password. And the way out for good: deleting the account, which the app
+// stores require of an app with sign-in.
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, Pressable, Switch, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { GymMark, Screen } from "@/components/Screen";
 import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, RowLink, Title, WithSpinner } from "@/components/ui";
@@ -18,10 +19,33 @@ import { pushSupported, registerForPush, usePushState } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 import { useAsyncAction } from "@/lib/useAsyncAction";
+import { useClock } from "@/lib/useClock";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
-import type { FaceStatus, NotificationPreferences, NotificationSettings, Profile as ProfileData } from "@/lib/types";
+import type { FaceStatus, NotificationPreferences, NotificationSettings, Profile as ProfileData, SavedMethod } from "@/lib/types";
 
 const MIN_PASSWORD = 8;
+
+const CARD_BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", unionpay: "UnionPay", paypak: "PayPak" };
+
+/** "Visa •••• 4242", as the card is printed. */
+function cardName(m: SavedMethod): string {
+  const brand = String(m.brand || "").trim();
+  const name = CARD_BRANDS[brand.toLowerCase()] || (brand ? brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase() : "Card");
+  return m.last4 ? `${name} •••• ${m.last4}` : name;
+}
+
+/** The card's expiry as printed on it ("08/27"), and whether that month has gone by. */
+function cardExpiry(m: SavedMethod, now: number): { label: string; expired: boolean } | null {
+  const month = Number(m.exp_month);
+  const printed = Number(m.exp_year);
+  if (!month || !printed) return null;
+  const year = printed < 100 ? 2000 + printed : printed;
+  const today = new Date(now);
+  return {
+    label: `${String(month).padStart(2, "0")}/${String(year).slice(-2)}`,
+    expired: year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth() + 1),
+  };
+}
 
 /**
  * Why a profile save failed, in words a member can act on. The server's
@@ -58,13 +82,19 @@ export default function Profile() {
   const me = profile.data?.data;
   const notifications = useLoad<{ data: NotificationSettings }>("/user/notification-preferences");
   const face = useLoad<{ data: FaceStatus }>("/api/attendance/me/face");
+  // Cards saved for automatic payments. Most members have none, and a server
+  // from before automatic payments answers 404: either way there is nothing
+  // to show, so the section only appears with a card in it.
+  const saved = useLoad<{ data: SavedMethod[] }>("/api/billing/me/saved-methods");
   const closed = useGymClosed(profile, notifications, face);
   const reload = () => {
     closed.clear();
     profile.reload();
     notifications.reload();
     face.reload();
+    saved.reload();
   };
+  const now = useClock();
 
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -95,6 +125,14 @@ export default function Profile() {
   // off, so a reload that cannot get through does not say "on" beside
   // "removed"; any later answer from the server replaces it.
   const [faceRemovedFrom, setFaceRemovedFrom] = useState<FaceStatus | null>(null);
+  // Turning automatic payments off: which card is on its way, and what came
+  // of it, shown under that card. A card turned off leaves the list at once,
+  // before the reload says so, and its answer stays where it was until the
+  // member leaves the tab.
+  const autoPay = useAsyncAction();
+  const [autoPayAnswer, setAutoPayAnswer] = useState<{ id: string; tone: "ok" | "error"; text: string } | null>(null);
+  const [turnedOff, setTurnedOff] = useState<string[]>([]);
+  useFocusEffect(useCallback(() => () => setAutoPayAnswer(null), []));
 
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", goals: "", currentPassword: "" });
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
@@ -353,11 +391,67 @@ export default function Profile() {
         })
     );
 
+  // Withdrawing consent to automatic payments. The server removes the saved
+  // card (the gym only ever held the payment provider's reference to it) and
+  // stops charging it straight away; from then on the member pays each
+  // renewal from the payment link the gym sends before it is due.
+  const turnOffAutoPay = (m: SavedMethod) => {
+    const card = cardName(m);
+    const tell = (tone: "ok" | "error", text: string) => {
+      setAutoPayAnswer({ id: m.id, tone, text });
+      AccessibilityInfo.announceForAccessibility(text);
+    };
+    const gone = () => {
+      setTurnedOff((ids) => [...ids, m.id]);
+      saved.reload();
+    };
+    return autoPay.run(
+      m.id,
+      async () => {
+        setAutoPayAnswer(null);
+        try {
+          await api<{ success: boolean }>(`/api/billing/me/saved-methods/${encodeURIComponent(m.id)}`, { method: "DELETE", session, onUnauthorised: signOut });
+          gone();
+          tell("ok", m.auto_pay ? `Automatic payments are off and ${card} has been removed. Before each due date you will get a payment link to pay yourself.` : `${card} has been removed.`);
+        } catch (e) {
+          if (closed.caught(e)) return;
+          // Removed already -- on the website, or by the gym.
+          if (e instanceof ApiError && e.status === 404) {
+            gone();
+            tell("ok", `${card} had already been removed, so it will not be charged.`);
+            return;
+          }
+          tell("error", e instanceof ApiError || e instanceof Error ? e.message : "Could not turn automatic payments off. Please try again.");
+        }
+      },
+      () =>
+        confirmAction({
+          title: m.auto_pay ? "Turn off automatic payments?" : "Remove this card?",
+          message: m.auto_pay
+            ? `Your gym will no longer charge ${card} by itself, and the card is removed from your account. Before each due date you will get a payment link to pay yourself.`
+            : `${card} is removed from your account.`,
+          confirm: m.auto_pay ? "Turn off" : "Remove",
+          cancel: "Keep it",
+          destructive: true,
+        })
+    );
+  };
+
   /** The last answer, if it belongs here. */
   const answerAt = (at: "details" | "notifications" | "account") =>
     message?.at === at ? (
       <Notice tone={message.tone} style={{ marginTop: space.sm, marginBottom: 0 }}>
         {message.text}
+      </Notice>
+    ) : null;
+
+  // The cards still saved. When the list cannot be fetched there is none to
+  // show; the last one fetched stays until a new one arrives.
+  const methods = (saved.data?.data || []).filter((m) => !turnedOff.includes(m.id));
+  const answerUnder = (id: string) =>
+    autoPayAnswer?.id === id ? (
+      <Notice tone={autoPayAnswer.tone} style={{ marginTop: space.sm, marginBottom: 0 }}>
+        {autoPayAnswer.text}
       </Notice>
     ) : null;
 
@@ -595,6 +689,52 @@ export default function Profile() {
           </>
         )}
       </Card>
+
+      {/* A card the gym charges by itself on each due date, and the way to
+          stop that. Once the last one is turned off, its answer keeps the
+          section up until the member leaves the tab. */}
+      {methods.length > 0 || autoPayAnswer ? (
+        <Card style={{ marginBottom: space.lg }}>
+          <Heading>Automatic payments</Heading>
+          {methods.map((m, i) => {
+            const expiry = cardExpiry(m, now);
+            return (
+              <View key={m.id}>
+                {i > 0 ? <Divider /> : null}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
+                  <View style={{ flex: 1 }}>
+                    <Body style={{ fontWeight: "700" }}>{cardName(m)}</Body>
+                    {expiry ? (
+                      <Caption style={expiry.expired ? { marginTop: 2, color: p.danger } : { marginTop: 2 }}>
+                        {expiry.expired ? `Expired ${expiry.label} — you will get a payment link instead` : `Expires ${expiry.label}`}
+                      </Caption>
+                    ) : null}
+                    {m.consent_at ? <Caption>{m.auto_pay ? "Turned on" : "Saved"} {longDate(m.consent_at)}</Caption> : null}
+                  </View>
+                  <Pill label={m.auto_pay ? "on" : "off"} tone={m.auto_pay ? "good" : "neutral"} />
+                </View>
+                <Button
+                  label={m.auto_pay ? "Turn off" : "Remove card"}
+                  variant="secondary"
+                  onPress={() => turnOffAutoPay(m)}
+                  busy={autoPay.busy === m.id}
+                  disabled={!!autoPay.busy}
+                  style={{ marginTop: space.md }}
+                />
+                {answerUnder(m.id)}
+              </View>
+            );
+          })}
+          {/* The card just turned off has left the list; what came of it stays in its place. */}
+          {autoPayAnswer && !methods.some((m) => m.id === autoPayAnswer.id) ? answerUnder(autoPayAnswer.id) : null}
+          {methods.length > 0 ? (
+            <Caption style={{ marginTop: space.md }}>
+              Your gym charges your saved card on each due date, as you agreed when you saved it. Turn it off and you will get a payment link before each due
+              date instead. The card itself is kept by the payment provider, not by your gym or GymsPilotPro.
+            </Caption>
+          ) : null}
+        </Card>
+      ) : null}
 
       {/* Whether the desk's webcam knows their face, and a way to take that back. */}
       <Card style={{ marginBottom: space.lg }}>

@@ -339,6 +339,24 @@ export interface Profile {
   createdAt?: string;
 }
 
+/**
+ * GET /api/billing/me/saved-methods → data[]: a card the member saved, with
+ * their consent, for the gym to charge by itself on each due date. The gym
+ * keeps only the payment provider's reference to it, never the card. DELETE
+ * on `/:id` removes it and stops automatic payments at once (`{ success }`).
+ */
+export interface SavedMethod {
+  id: string;
+  /** visa, mastercard, ... as the payment provider names it. */
+  brand: string;
+  last4: string;
+  exp_month: number | null;
+  exp_year: number | null;
+  auto_pay: boolean;
+  /** When the member agreed to automatic payments. */
+  consent_at: string | null;
+}
+
 /** GET /announcements/active → data[] */
 export interface Announcement {
   id: string;
