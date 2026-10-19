@@ -13,7 +13,10 @@
 // One scan is one attempt with its own request_id. When the answer is lost on
 // the way back -- no signal at the door -- Try again sends the same attempt
 // with the same id, and the server answers it again instead of taking it for
-// a second scan, which a minute later would be the way out.
+// a second scan, which a minute later would be the way out. The code itself
+// lasts only a minute, so by the time the signal is back the member may have
+// to scan again: that scan keeps the unanswered attempt's id too (for a few
+// minutes), for the same reason.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, AppState, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -36,6 +39,13 @@ const CHECKED_OUT = "#60a5fa";
 
 /** The widest the viewfinder gets, so a big phone held close is not all camera. */
 const MAX_VIEWFINDER = 420;
+
+/**
+ * How long an attempt that got no answer passes its request_id on to the
+ * next scan. Long enough to cover stepping outside for a signal and scanning
+ * again; short enough that leaving after a session is a new attempt.
+ */
+const CARRY_ID_MS = 10 * 60_000;
 
 const WRONG_CODE = "That isn't your gym's check-in code.";
 
@@ -142,6 +152,8 @@ export default function CheckIn() {
   // The camera reports the same code many times a second, faster than the
   // screen can re-render to stop listening: this takes the first one only.
   const reading = useRef(false);
+  // The last attempt that got no answer, and when it was first sent.
+  const unanswered = useRef<{ id: string; at: number } | null>(null);
 
   // Coming back from the phone's settings with the camera switched on: pick
   // that up without making the member close the screen and open it again.
@@ -171,6 +183,9 @@ export default function CheckIn() {
       if (!session) return;
       setPhase({ kind: "sending", code, requestId, before });
       let outcome: Outcome;
+      // Whether the gym judged the attempt itself. Its errors (a stale code, a
+      // signed-out desk) are about the code: the attempt never got that far.
+      let judged = false;
       try {
         const answer = await api<CheckInAnswer>("/api/attendance/me/checkin", {
           method: "POST",
@@ -178,6 +193,7 @@ export default function CheckIn() {
           session,
           onUnauthorised: signOut,
         });
+        judged = true;
         outcome = outcomeOf(answer);
       } catch (e) {
         // A gym closed to its members: the one notice, in place of the screen.
@@ -188,6 +204,10 @@ export default function CheckIn() {
         }
         outcome = problemOf(e);
       }
+      // The gym's verdict settles the attempt. No answer at all leaves it open
+      // for the next scan; an error about the code leaves things as they were.
+      if (judged) unanswered.current = null;
+      else if (outcome.retry && unanswered.current?.id !== requestId) unanswered.current = { id: requestId, at: Date.now() };
       setPhase({ kind: "done", code, requestId, outcome });
       // Said out loud too: the card replaces the camera, and a screen reader
       // would otherwise stay silent about whether the member got in.
@@ -206,7 +226,8 @@ export default function CheckIn() {
       }
       reading.current = true;
       setWrongCode(false);
-      void send(code, newRequestId());
+      const carried = unanswered.current;
+      void send(code, carried && Date.now() - carried.at < CARRY_ID_MS ? carried.id : newRequestId());
     },
     [send]
   );

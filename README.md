@@ -163,7 +163,9 @@ checked in a moment ago", or refused with the gym's reason.
 
 Each scan gets a fresh `request_id`; **Try again** after a lost answer sends
 the same one, so the server repeats its first answer instead of recording a
-check-out. Nothing about the camera is kept: no picture leaves the phone, and
+check-out. The server checks the code before the id, and a code lasts a
+minute, so a scan within ten minutes of an attempt that got no answer at all
+reuses that attempt's id too. Nothing about the camera is kept: no picture leaves the phone, and
 earlier builds' saved member QR (the old way in) is deleted on launch.
 
 ## Push notifications
