@@ -263,7 +263,10 @@ export interface MembershipOrder {
   payment: {
     /** pending | processing | paid | failed | refunded | cancelled */
     status: string;
-    /** stripe (online card checkout) | card (desk terminal) | bank_transfer | cash */
+    /**
+     * stripe (online card checkout) | online (a renewal paid from its payment
+     * link) | card (desk terminal) | bank_transfer | cash
+     */
     method: string;
     amount: number;
     currency: string;
@@ -286,6 +289,19 @@ export interface MembershipOrder {
     proof?: { rejectionReason?: string; reviewedAt?: string | null } | null;
   };
   invoice?: { number?: string } | null;
+  /**
+   * A renewal the gym set up before the current term ends, to be paid online:
+   * the address of its payment page on the gym's website (`/pay/<token>`),
+   * which needs no sign-in. Only on an unpaid renewal, and only from a server
+   * that sends payment links.
+   */
+  pay_link_url?: string | null;
+  /**
+   * Strings the server keeps on the order. A renewal with a payment link has
+   * `dueDate` (when the current term ends) and `lastDay` (the last day to pay
+   * it), as dates.
+   */
+  metadata?: Record<string, string> | null;
 }
 
 /** GET /api/gymfolio/packages/active → data[] */

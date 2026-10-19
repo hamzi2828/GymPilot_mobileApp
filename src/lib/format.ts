@@ -26,13 +26,19 @@ export function longDate(iso: string | null | undefined): string {
   return date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 }
 
+/** Whole calendar days from `now` to the date: 0 today, 1 tomorrow, -1 yesterday; null with no date. */
+export function daysUntil(iso: string | null | undefined, now = Date.now()): number | null {
+  if (!iso) return null;
+  const target = new Date(iso);
+  if (Number.isNaN(target.getTime())) return null;
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((startOfDay(target) - startOfDay(new Date(now))) / 86400000);
+}
+
 /** "in 4 days", "today", "6 days ago" — how a person talks about a date. */
 export function relativeDays(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const target = new Date(iso);
-  if (Number.isNaN(target.getTime())) return "";
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOfDay(target) - startOfDay(new Date())) / 86400000);
+  const days = daysUntil(iso);
+  if (days === null) return "";
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";
   if (days === -1) return "yesterday";

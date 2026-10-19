@@ -19,12 +19,18 @@
 // wants the sign-in sent as a header, which a browser cannot do, so that
 // link still opens the website's account page.
 //
+// A renewal the gym wants paid online comes with a payment link
+// (pay_link_url): the gym's own payment page, where the link is the sign-in.
+// It is shown first, as "Payment due", with Pay now opening that page over
+// the app.
+//
 // Which order is "the membership" is decided in lib/membership: only a paid,
 // live one. A bank transfer still waiting is shown on its own, and a card
 // checkout that was never paid is not shown at all.
 
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Pressable, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill, WithSpinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
@@ -34,9 +40,12 @@ import {
   awaitingPayment,
   balanceOwing,
   currentMembership,
+  dueStage,
   endDateLabel,
   endedMemberships,
   isLive,
+  payDates,
+  paymentDue,
   rejectedRecently,
   rejectionMessage,
   renewsAutomatically,
@@ -98,6 +107,8 @@ export default function Membership() {
   // A session pack alongside the membership, or a renewal bought early.
   const alsoLive = list.filter((o) => o !== current && isLive(o));
   const waiting = awaitingPayment(list);
+  // Renewals to pay online, before or just after the current term runs out.
+  const due = paymentDue(list);
   // Receipts staff turned down in the last month: the member needs to know why.
   const notAccepted = list.filter((o) => rejectedRecently(o, now));
   const past = endedMemberships(list);
@@ -200,6 +211,28 @@ export default function Membership() {
     }
   };
 
+  // A renewal that is due opens its payment page over the app, and the list
+  // is read again when the browser closes, so a payment that went through
+  // shows straight away -- as with the card page, that reload is the one that
+  // counts on iOS, and on Android it is the app coming back to the
+  // foreground. `payingFor` is the renewal last opened, so the screen can say
+  // what came of it: thanks once it is paid, and until then a word not to pay
+  // twice while the payment is still on its way. Leaving the tab forgets it.
+  const pay = useAsyncAction();
+  const [payingFor, setPayingFor] = useState<string | null>(null);
+  const payNow = (o: MembershipOrder) =>
+    pay.run(o._id, async () => {
+      setPayingFor(o._id);
+      await openWeb(o.pay_link_url || "");
+      orders.reload();
+    });
+  useFocusEffect(useCallback(() => () => setPayingFor(null), []));
+  const justPaid = payingFor ? list.find((o) => o._id === payingFor && o.payment?.status === "paid") : undefined;
+  const paidText = justPaid ? `Thank you — your payment for ${justPaid.packageDetails?.name || "your membership"} has arrived.` : "";
+  useEffect(() => {
+    if (paidText) AccessibilityInfo.announceForAccessibility(paidText);
+  }, [paidText]);
+
   /** The last answer, if it belongs here. */
   const answerAt = (at: "actions" | "card") =>
     message?.at === at ? (
@@ -294,6 +327,48 @@ export default function Membership() {
     );
   };
 
+  // A renewal to pay on the gym's payment page: what it is, how much, when it
+  // is due and the last day it can be paid, and Pay now. Past the due date it
+  // says overdue.
+  const dueCard = (o: MembershipOrder) => {
+    const { dueDate, lastDay } = payDates(o);
+    const stage = dueStage(o, now);
+    const late = stage === "overdue" || stage === "late";
+    const reason = (o.payment?.lastPaymentError || "").trim().replace(/[.\s]+$/, "");
+    const what =
+      o.payment?.status === "processing"
+        ? "A payment for this is being confirmed. Pull down to refresh in a minute before you pay again."
+        : stage === "late"
+          ? "The last day to pay has passed. You can still pay now, or ask at the front desk."
+          : late
+            ? "This payment is overdue. Pay by the last day to renew your membership."
+            : `Pay ${stage === "today" ? "today" : "by the due date"} and your membership carries on without a break.`;
+    return (
+      <Card key={o._id} style={{ borderColor: `${late ? p.danger : p.warning}66` }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: space.md }}>
+          <View style={{ flex: 1 }}>
+            <Body style={{ fontWeight: "700", fontSize: 17 }}>{o.packageDetails?.name || "Membership"}</Body>
+            <Caption style={{ marginTop: 2 }}>{o.orderNumber}</Caption>
+          </View>
+          <Pill label={stage === "today" ? "due today" : late ? "overdue" : "due"} tone={late ? "bad" : "warn"} />
+        </View>
+        <Divider />
+        {o.payment ? <Line label="Amount" value={money(o.payment.amount, o.payment.currency)} /> : null}
+        {dueDate ? <Line label="Due" value={`${longDate(dueDate)} · ${relativeDays(dueDate)}`} /> : null}
+        {lastDay && longDate(lastDay) !== longDate(dueDate) ? <Line label="Last day to pay" value={longDate(lastDay)} /> : null}
+        {/* The gym tried the member's saved card on the due date and it was refused. */}
+        {o.payment?.status === "failed" ? (
+          <Caption style={{ marginTop: space.sm, color: p.danger }}>Your saved card could not be charged{reason ? `: ${reason}` : ""}.</Caption>
+        ) : null}
+        <Caption style={{ marginTop: space.sm }}>{what}</Caption>
+        <Button label="Pay now" onPress={() => payNow(o)} busy={pay.busy === o._id} disabled={!!pay.busy} style={{ marginTop: space.md }} />
+        {payingFor === o._id && pay.busy !== o._id && o.payment?.status !== "processing" ? (
+          <Caption style={{ marginTop: space.sm }}>Just paid? It can take a minute to show here. Pull down to refresh before you pay again.</Caption>
+        ) : null}
+      </Card>
+    );
+  };
+
   if (closed.message) {
     return (
       <Screen title="Membership" refreshing={orders.refreshing} onRefresh={reload}>
@@ -308,6 +383,15 @@ export default function Membership() {
       {message && !current ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {orders.error && orders.data ? <Notice tone="error">{orders.error}</Notice> : null}
 
+      {/* Money to pay now comes first; once paid, the thanks takes its place. */}
+      {paidText ? <Notice tone="ok">{paidText}</Notice> : null}
+      {due.length > 0 ? (
+        <>
+          <Heading>Payment due</Heading>
+          <View style={{ gap: space.sm, marginBottom: space.xl }}>{due.map(dueCard)}</View>
+        </>
+      ) : null}
+
       {orders.loading ? (
         <Loading />
       ) : orders.error && !orders.data ? (
@@ -316,9 +400,10 @@ export default function Membership() {
           <LoadFailed message={orders.error} onRetry={reload} />
         </View>
       ) : !current ? (
-        // Nothing live. A transfer still waiting says so below; otherwise say
-        // plainly there is no membership and where to get one.
-        waiting.length > 0 ? null : (
+        // Nothing live. A transfer still waiting says so below, and a renewal
+        // still to pay says so above; otherwise say plainly there is no
+        // membership and where to get one.
+        waiting.length > 0 || due.length > 0 ? null : (
           <>
             <Empty
               title={past.length > 0 ? "Your membership has ended" : "You do not have a membership yet"}

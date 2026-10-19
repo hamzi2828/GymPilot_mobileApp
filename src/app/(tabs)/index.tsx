@@ -9,7 +9,7 @@ import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title, WithSpinner } from "@/components/ui";
 import { dayLabel, longDate, money, relativeDays, timeRange } from "@/lib/format";
-import { awaitingPayment, balanceOwing, currentMembership, endDateLabel, isLive, SITE_PACKAGES, statusPill } from "@/lib/membership";
+import { awaitingPayment, balanceOwing, currentMembership, dueStage, endDateLabel, isLive, payDates, paymentDue, SITE_PACKAGES, statusPill } from "@/lib/membership";
 import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
@@ -38,6 +38,8 @@ export default function Home() {
   // Only a paid, live order is "your membership" (see lib/membership).
   const active = currentMembership(memberships.data?.data || []);
   const waiting = awaitingPayment(memberships.data?.data || []);
+  // A renewal to pay from its payment link: the soonest due, if any.
+  const due = paymentDue(memberships.data?.data || [])[0];
   // Everything still owed on what they hold now, a session pack alongside
   // the membership included.
   const owing = (memberships.data?.data || []).filter(isLive).reduce((sum, o) => sum + balanceOwing(o), 0);
@@ -92,6 +94,9 @@ export default function Home() {
           {notices.map((a) => (
             <AnnouncementCard key={a.id} announcement={a} siteUrl={siteUrl} />
           ))}
+
+          {/* A renewal to pay. Pay now is on the Membership tab, with the details. */}
+          {due ? <PaymentDueBanner order={due} now={now} /> : null}
 
           {/* Check in. The one thing they open the app for at the door. */}
           <Pressable
@@ -259,6 +264,36 @@ export default function Home() {
         </>
       )}
     </Screen>
+  );
+}
+
+/** "Payment due": how much, for what and by when, leading to the Membership tab. */
+function PaymentDueBanner({ order: o, now }: { order: MembershipOrder; now: number }) {
+  const p = usePalette();
+  const router = useRouter();
+  const { dueDate } = payDates(o);
+  const stage = dueStage(o, now);
+  const late = stage === "overdue" || stage === "late";
+  const colour = late ? p.danger : p.warning;
+  const title = late ? "Payment overdue" : "Payment due";
+  const amount = o.payment ? money(o.payment.amount, o.payment.currency) : "";
+  const when = !dueDate ? "" : stage === "today" ? "today" : late ? `on ${longDate(dueDate)}` : `${relativeDays(dueDate)}, ${longDate(dueDate)}`;
+  const line = [amount, o.packageDetails?.name].filter(Boolean).join(" for ") + (when ? `, due ${when}` : "");
+
+  return (
+    <Pressable
+      onPress={() => router.navigate("/(tabs)/membership")}
+      accessibilityRole="link"
+      accessibilityLabel={`${title}. ${line}.`}
+      accessibilityHint="Opens Membership, where you can pay"
+      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, marginBottom: space.lg })}
+    >
+      <Card style={{ borderColor: `${colour}66` }}>
+        <Body style={{ fontWeight: "700", color: colour }}>{title}</Body>
+        {line ? <Body style={{ marginTop: 4, fontSize: 14 }}>{line}</Body> : null}
+        <Body style={{ marginTop: space.sm, color: p.accent, fontWeight: "700", fontSize: 14 }}>Pay now on the Membership tab ›</Body>
+      </Card>
+    </Pressable>
   );
 }
 

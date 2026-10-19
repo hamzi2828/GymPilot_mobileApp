@@ -15,10 +15,14 @@
 //   awaiting  -- a bank transfer, or a sale the desk has not taken the money
 //                for yet: shown on its own, as waiting, never as the
 //                membership.
+//   due       -- a renewal the gym set up before the current term ends, with
+//                a payment link to pay it online: shown as "Payment due",
+//                with Pay now.
 //   ended     -- paid for once and over now: the history.
 //
-// An unpaid card checkout is none of these, and is not shown at all.
+// An unpaid online checkout is none of these, and is not shown at all.
 
+import { daysUntil } from "@/lib/format";
 import type { MembershipOrder } from "@/lib/types";
 
 /** Where on the gym's website these things live: buying a plan happens there. */
@@ -66,16 +70,65 @@ export function currentMembership(orders: MembershipOrder[], now = Date.now()): 
 }
 
 /**
- * Waiting on money that does not come through Stripe Checkout: a bank
+ * Paid for online, on the payment provider's page: a Stripe or Safepay
+ * checkout, or a renewal paid from its payment link.
+ */
+const ONLINE_METHODS = ["stripe", "safepay", "online"];
+
+/**
+ * Waiting on money that does not come through an online checkout: a bank
  * transfer (before or after the receipt is sent), or a sale the desk made
- * without taking payment yet. An unpaid card checkout is left out on
+ * without taking payment yet. An unpaid online checkout is left out on
  * purpose -- it is either still open in a browser or abandoned, and the
- * member has nothing to do about it here.
+ * member has nothing to do about it here -- and a renewal with a payment
+ * link is "due" (paymentDue), paid from the app, not at the desk.
  */
 export function awaitingPayment(orders: MembershipOrder[]): MembershipOrder[] {
   return orders.filter(
-    (o) => o.status === "pending" && o.payment?.method !== "stripe" && ["pending", "processing"].includes(o.payment?.status)
+    (o) =>
+      o.status === "pending" &&
+      !ONLINE_METHODS.includes(o.payment?.method) &&
+      !o.pay_link_url &&
+      ["pending", "processing"].includes(o.payment?.status)
   );
+}
+
+/**
+ * Renewals waiting to be paid from their payment link, soonest due first.
+ * The server sets one up shortly before the current term ends, reminds the
+ * member about it, and puts the link on it (`pay_link_url`) for as long as it
+ * can still be paid; once it is paid it is an ordinary live order.
+ */
+export function paymentDue(orders: MembershipOrder[]): MembershipOrder[] {
+  const dueAt = (o: MembershipOrder) => {
+    const at = new Date(payDates(o).dueDate || "").getTime();
+    return Number.isFinite(at) ? at : Number.MAX_SAFE_INTEGER;
+  };
+  return orders.filter((o) => !!o.pay_link_url && o.status === "pending" && o.payment?.status !== "paid").sort((a, b) => dueAt(a) - dueAt(b));
+}
+
+/**
+ * When a renewal is due and the last day to pay it, as the server keeps them
+ * on the order. A bare date ("2026-10-22") is read as that day on the phone,
+ * not as midnight UTC, which is still the day before anywhere west of it.
+ */
+export function payDates(o: MembershipOrder): { dueDate: string | null; lastDay: string | null } {
+  const day = (v: string | undefined) => (!v ? null : /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T00:00:00` : v);
+  return { dueDate: day(o.metadata?.dueDate), lastDay: day(o.metadata?.lastDay) };
+}
+
+/**
+ * Where a due renewal stands today: still to come, due today, past its due
+ * date ("overdue"), or past the last day to pay as well ("late") -- which the
+ * link may still pay for a few days, until the server takes it off.
+ */
+export function dueStage(o: MembershipOrder, now: number): "soon" | "today" | "overdue" | "late" {
+  const { dueDate, lastDay } = payDates(o);
+  const toDue = daysUntil(dueDate, now);
+  const toLast = daysUntil(lastDay, now);
+  if (toLast !== null && toLast < 0) return "late";
+  if (toDue === null || toDue > 0) return "soon";
+  return toDue === 0 ? "today" : "overdue";
 }
 
 /** Paid for once and not live now: expired, cancelled, refunded. */
