@@ -7,12 +7,13 @@ import { Pressable, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
-import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title, WithSpinner } from "@/components/ui";
 import { dayLabel, longDate, money, relativeDays, timeRange } from "@/lib/format";
 import { awaitingPayment, balanceOwing, currentMembership, endDateLabel, isLive, SITE_PACKAGES, statusPill } from "@/lib/membership";
 import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { Announcement, AttendanceSummary, MembershipOrder, TimetableResponse } from "@/lib/types";
 
@@ -40,9 +41,12 @@ export default function Home() {
   // the membership included.
   const owing = (memberships.data?.data || []).filter(isLive).reduce((sum, o) => sum + balanceOwing(o), 0);
   const siteUrl = branding?.siteUrl || "";
-  const openSite = (path: string) => {
-    if (siteUrl) openWeb(webAddress(siteUrl, path));
-  };
+  // The button shows a spinner until the page is up over the app.
+  const site = useAsyncAction();
+  const openSite = (path: string) =>
+    site.run(path, async () => {
+      if (siteUrl) await openWeb(webAddress(siteUrl, path));
+    });
   // The clock, read when the screen opens rather than on every render.
   const [openedAt, setOpenedAt] = useState(0);
   useFocusEffect(
@@ -179,7 +183,13 @@ export default function Home() {
             <>
               <Empty title="No membership yet" hint="Join on your gym's website, or ask at the front desk and they will set one up for you." />
               {siteUrl ? (
-                <Button label="See plans on the website" variant="secondary" onPress={() => openSite(SITE_PACKAGES)} style={{ marginTop: space.md, marginBottom: space.xl }} />
+                <Button
+                  label="See plans on the website"
+                  variant="secondary"
+                  onPress={() => openSite(SITE_PACKAGES)}
+                  busy={!!site.busy}
+                  style={{ marginTop: space.md, marginBottom: space.xl }}
+                />
               ) : null}
             </>
           )}
@@ -263,14 +273,24 @@ function AnnouncementCard({ announcement: a, siteUrl }: { announcement: Announce
   const p = usePalette();
   const colour = a.tone === "warning" ? p.warning : a.tone === "success" ? p.success : p.accent;
   const href = !a.url ? "" : /^https?:\/\//i.test(a.url) ? a.url : webAddress(siteUrl, a.url);
+  const opening = useAsyncAction();
 
   return (
     <Card style={{ marginBottom: space.lg, borderColor: `${colour}66` }}>
       <Body style={{ fontWeight: "700", color: colour }}>{a.title}</Body>
       {a.body ? <Body style={{ marginTop: 4, fontSize: 14 }}>{a.body}</Body> : null}
       {href ? (
-        <Pressable onPress={() => openWeb(href)} hitSlop={8} accessibilityRole="link" style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
-          <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>{a.url_label || "Read more"} ›</Body>
+        <Pressable
+          onPress={() => opening.run("open", () => openWeb(href))}
+          disabled={!!opening.busy}
+          hitSlop={8}
+          accessibilityRole="link"
+          accessibilityState={{ disabled: !!opening.busy, busy: !!opening.busy }}
+          style={{ marginTop: space.sm, alignSelf: "flex-start" }}
+        >
+          <WithSpinner busy={!!opening.busy} colour={p.accent}>
+            <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>{a.url_label || "Read more"} ›</Body>
+          </WithSpinner>
         </Pressable>
       ) : null}
     </Card>

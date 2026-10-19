@@ -26,7 +26,7 @@
 import React, { useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill, WithSpinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction } from "@/lib/confirm";
 import { longDate, money, relativeDays } from "@/lib/format";
@@ -49,6 +49,7 @@ import {
 import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { MembershipOrder, PackageOnSale } from "@/lib/types";
 
@@ -100,9 +101,18 @@ export default function Membership() {
   const owing = current ? balanceOwing(current) : 0;
 
   const siteUrl = branding?.siteUrl || "";
-  const openSite = (path: string) => {
-    if (siteUrl) openWeb(webAddress(siteUrl, path));
-  };
+  // A page on the gym's website, opened over the app. `key` is the link or
+  // button that asked, which shows a spinner until the page is up.
+  const site = useAsyncAction();
+  const openSite = (key: string, path: string) =>
+    site.run(key, async () => {
+      if (siteUrl) await openWeb(webAddress(siteUrl, path));
+    });
+  const opensSite = (key: string, path: string) => ({
+    onPress: () => openSite(key, path),
+    disabled: !!site.busy,
+    accessibilityState: { disabled: !!site.busy, busy: site.busy === key },
+  });
 
   // One thing at a time: from the first tap -- the "are you sure?" included
   // -- until the server has answered, every other action waits. `busy` only
@@ -182,13 +192,15 @@ export default function Membership() {
   const invoiceLink = (o: MembershipOrder) =>
     o.payment?.status === "paid" && siteUrl ? (
       <Pressable
-        onPress={() => openSite(SITE_ACCOUNT_HISTORY)}
+        {...opensSite(`invoice-${o._id}`, SITE_ACCOUNT_HISTORY)}
         hitSlop={8}
         accessibilityRole="link"
         accessibilityLabel={`Invoice for ${o.packageDetails?.name || o.orderNumber}, on your gym's website`}
         style={{ marginTop: space.sm, alignSelf: "flex-start" }}
       >
-        <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Invoice PDF on the website ›</Body>
+        <WithSpinner busy={site.busy === `invoice-${o._id}`} colour={p.accent}>
+          <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Invoice PDF on the website ›</Body>
+        </WithSpinner>
       </Pressable>
     ) : null;
 
@@ -251,8 +263,10 @@ export default function Membership() {
               : `Send the transfer with ${o.orderNumber} as the reference, then send the gym your receipt from the website.`}
         </Caption>
         {transfer && siteUrl ? (
-          <Pressable onPress={() => openSite(siteBankTransfer(o._id))} hitSlop={8} accessibilityRole="link" style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
-            <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>{receiptSent ? "Transfer details ›" : "Bank details and receipt ›"}</Body>
+          <Pressable {...opensSite(`bank-${o._id}`, siteBankTransfer(o._id))} hitSlop={8} accessibilityRole="link" style={{ marginTop: space.sm, alignSelf: "flex-start" }}>
+            <WithSpinner busy={site.busy === `bank-${o._id}`} colour={p.accent}>
+              <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>{receiptSent ? "Transfer details ›" : "Bank details and receipt ›"}</Body>
+            </WithSpinner>
           </Pressable>
         ) : null}
       </Card>
@@ -292,7 +306,15 @@ export default function Membership() {
                   : "The front desk can set one up for you, or you can join from your gym's website."
               }
             />
-            {siteUrl ? <Button label="See plans on the website" onPress={() => openSite(SITE_PACKAGES)} style={{ marginTop: space.lg, marginBottom: space.xl }} /> : null}
+            {siteUrl ? (
+              <Button
+                label="See plans on the website"
+                onPress={() => openSite("plans", SITE_PACKAGES)}
+                busy={site.busy === "plans"}
+                disabled={!!site.busy}
+                style={{ marginTop: space.lg, marginBottom: space.xl }}
+              />
+            ) : null}
           </>
         )
       ) : (
@@ -342,9 +364,12 @@ export default function Membership() {
                 disabled={!!busy}
                 hitSlop={8}
                 accessibilityRole="link"
+                accessibilityState={{ disabled: !!busy, busy: busy === CARD }}
                 style={{ marginTop: space.sm, alignSelf: "flex-start", opacity: busy ? 0.5 : 1 }}
               >
-                <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Change my card ›</Body>
+                <WithSpinner busy={busy === CARD} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "700", fontSize: 14 }}>Change my card ›</Body>
+                </WithSpinner>
               </Pressable>
             ) : null}
           </Card>
@@ -404,9 +429,12 @@ export default function Membership() {
                       <Pressable
                         key={days}
                         onPress={() => pauseFor(days)}
+                        disabled={!!busy}
                         accessibilityRole="button"
                         accessibilityLabel={`Pause for ${days} days`}
+                        accessibilityState={{ disabled: !!busy }}
                         style={({ pressed }) => ({
+                          opacity: busy ? 0.5 : 1,
                           backgroundColor: pressed ? p.accentDark : p.accent,
                           borderRadius: radius.pill,
                           paddingHorizontal: space.lg,
@@ -514,7 +542,9 @@ export default function Membership() {
               <Button
                 label={renews ? "Change your plan on the website" : "Renew or change your plan on the website"}
                 variant="secondary"
-                onPress={() => openSite(SITE_PACKAGES)}
+                onPress={() => openSite("plans", SITE_PACKAGES)}
+                busy={site.busy === "plans"}
+                disabled={!!site.busy}
                 style={{ marginTop: space.sm }}
               />
             ) : (
