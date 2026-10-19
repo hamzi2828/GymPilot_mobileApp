@@ -5,11 +5,11 @@
 // the app stores require of an app with sign-in.
 
 import React, { useEffect, useState } from "react";
-import { Pressable, Switch, View } from "react-native";
+import { ActivityIndicator, Pressable, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { GymMark, Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, RowLink, Title } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Field, GymClosed, Heading, LegalLinks, Line, Loading, Notice, Pill, RowLink, Title, WithSpinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { confirmAction, tellMember } from "@/lib/confirm";
 import { initials, longDate } from "@/lib/format";
@@ -17,6 +17,7 @@ import { openApp, openPhoneSettings, openWeb } from "@/lib/open";
 import { pushSupported, registerForPush, usePushState } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { FaceStatus, NotificationPreferences, NotificationSettings, Profile as ProfileData } from "@/lib/types";
 
@@ -67,19 +68,21 @@ export default function Profile() {
 
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  // Saving the details, changing the password, signing out, deleting the
+  // account: one at a time, and the one under way shows the spinner.
+  const account = useAsyncAction<"save" | "password" | "signOut" | "delete">();
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   // Shown inside the password card, next to the fields it is about.
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // "Send the link again", for an email address not confirmed yet: whether
   // it is on its way, and what the server answered.
-  const [sendingLink, setSendingLink] = useState(false);
+  const link = useAsyncAction();
+  const sendingLink = !!link.busy;
   const [linkAnswer, setLinkAnswer] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   // Removing their face data: whether it is on its way, and what came of it,
   // shown in the face check-in card rather than at the top of the screen.
-  const [removingFace, setRemovingFace] = useState(false);
+  const faceRemoval = useAsyncAction();
   const [faceAnswer, setFaceAnswer] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   // The status the removal answered. Until a fresh one arrives it is shown as
   // off, so a reload that cannot get through does not say "on" beside
@@ -93,7 +96,16 @@ export default function Profile() {
   // flipped: an optimistic layer over the loaded values, put back if the
   // save fails.
   const [flipped, setFlipped] = useState<Partial<NotificationPreferences>>({});
-  const [savingPref, setSavingPref] = useState<keyof NotificationPreferences | null>(null);
+  // One switch saved at a time; the one being saved shows a spinner.
+  const pref = useAsyncAction<keyof NotificationPreferences>();
+  // Leaving the app for the dialler, mail, WhatsApp, a web page or the
+  // phone's settings: the link shows a spinner until the other app is up.
+  const leaving = useAsyncAction();
+  const opens = (key: string, open: () => Promise<void>) => ({
+    onPress: () => leaving.run(key, open),
+    disabled: !!leaving.busy,
+    accessibilityState: { disabled: !!leaving.busy, busy: leaving.busy === key },
+  });
 
   // Filled in when Edit is pressed rather than whenever the fetch lands, so a
   // refresh arriving mid-edit cannot wipe what has been typed.
@@ -136,27 +148,24 @@ export default function Profile() {
   // copy kept from sign-in stands in until it arrives.
   const emailUnconfirmed = me ? !!me.email && me.emailVerified === false : !!user?.email && user.emailVerified === false;
 
-  const sendConfirmation = async () => {
-    if (sendingLink) return;
-    setSendingLink(true);
-    setLinkAnswer(null);
-    try {
-      const res = await api<{ message?: string; alreadyVerified?: boolean }>("/user/verify-email/send", { method: "POST", session, onUnauthorised: signOut });
-      setLinkAnswer({ tone: "ok", text: res.message || "We sent you a new link. Open it to confirm the address is yours." });
-      // Confirmed in the meantime: read the profile again, and the line goes.
-      if (res.alreadyVerified) {
-        profile.reload();
-        refresh();
+  const sendConfirmation = () =>
+    link.run("send", async () => {
+      setLinkAnswer(null);
+      try {
+        const res = await api<{ message?: string; alreadyVerified?: boolean }>("/user/verify-email/send", { method: "POST", session, onUnauthorised: signOut });
+        setLinkAnswer({ tone: "ok", text: res.message || "We sent you a new link. Open it to confirm the address is yours." });
+        // Confirmed in the meantime: read the profile again, and the line goes.
+        if (res.alreadyVerified) {
+          profile.reload();
+          refresh();
+        }
+      } catch (e) {
+        if (closed.caught(e)) return;
+        // No address on the account, the email could not be sent, or too many
+        // were asked for: the server says which, in its own words.
+        setLinkAnswer({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not send the link. Please try again later." });
       }
-    } catch (e) {
-      if (closed.caught(e)) return;
-      // No address on the account, the email could not be sent, or too many
-      // were asked for: the server says which, in its own words.
-      setLinkAnswer({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not send the link. Please try again later." });
-    } finally {
-      setSendingLink(false);
-    }
-  };
+    });
 
   // Whether the email box now says something other than what the gym has
   // (a new address, a different one, or none). Only then is the address sent
@@ -164,8 +173,8 @@ export default function Profile() {
   // removal as much as for a change.
   const emailChanged = form.email.trim().toLowerCase() !== (me?.email || "").trim().toLowerCase();
 
-  const save = async () => {
-    if (busy) return;
+  const save = () => {
+    if (account.busy) return;
     const email = form.email.trim();
     const body = {
       firstName: form.firstName.trim(),
@@ -185,25 +194,24 @@ export default function Profile() {
       setMessage({ tone: "error", text: "That does not look like an email address. Leave it empty if you do not have one." });
       return;
     }
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await api<{ message?: string; data?: ProfileData }>("/update/user", { method: "PUT", session, onUnauthorised: signOut, body });
-      // Home greets the member by name: it should be the new one straight away.
-      if (res.data) await updateUser(res.data);
-      setMessage({ tone: "ok", text: "Your details have been saved." });
-      setEditing(false);
-      profile.reload();
-    } catch (e) {
-      if (closed.caught(e)) return;
-      setMessage({ tone: "error", text: saveProblem(e) });
-    } finally {
-      setBusy(false);
-    }
+    return account.run("save", async () => {
+      setMessage(null);
+      try {
+        const res = await api<{ message?: string; data?: ProfileData }>("/update/user", { method: "PUT", session, onUnauthorised: signOut, body });
+        // Home greets the member by name: it should be the new one straight away.
+        if (res.data) await updateUser(res.data);
+        setMessage({ tone: "ok", text: "Your details have been saved." });
+        setEditing(false);
+        profile.reload();
+      } catch (e) {
+        if (closed.caught(e)) return;
+        setMessage({ tone: "error", text: saveProblem(e) });
+      }
+    });
   };
 
-  const changePassword = async () => {
-    if (busy) return;
+  const changePassword = () => {
+    if (account.busy) return;
     if (passwords.newPassword.length < MIN_PASSWORD) {
       setPasswordError(`Your new password needs at least ${MIN_PASSWORD} characters.`);
       return;
@@ -212,34 +220,32 @@ export default function Profile() {
       setPasswordError("The two new passwords do not match.");
       return;
     }
-    setBusy(true);
-    setPasswordError(null);
-    try {
-      // A wrong current password comes back as a 401 with no session code,
-      // so it lands here as a message rather than signing the member out.
-      await api<{ message?: string }>("/user/change-password", {
-        method: "PUT",
-        session,
-        onUnauthorised: signOut,
-        body: { currentPassword: passwords.currentPassword, newPassword: passwords.newPassword },
-      });
-      // Changing the password ended every session, this one included. Sign
-      // out now -- which takes the phone off the gym's notification list
-      // first -- and then say why, rather than leave a dead session behind
-      // the dialog.
-      await signOut();
-      await tellMember("Password changed", "Please sign in again with your new password.");
-    } catch (e) {
-      if (closed.caught(e)) return;
-      setPasswordError(e instanceof ApiError || e instanceof Error ? e.message : "Could not change your password.");
-    } finally {
-      setBusy(false);
-    }
+    return account.run("password", async () => {
+      setPasswordError(null);
+      try {
+        // A wrong current password comes back as a 401 with no session code,
+        // so it lands here as a message rather than signing the member out.
+        await api<{ message?: string }>("/user/change-password", {
+          method: "PUT",
+          session,
+          onUnauthorised: signOut,
+          body: { currentPassword: passwords.currentPassword, newPassword: passwords.newPassword },
+        });
+        // Changing the password ended every session, this one included. Sign
+        // out now -- which takes the phone off the gym's notification list
+        // first -- and then say why, rather than leave a dead session behind
+        // the dialog.
+        await signOut();
+        await tellMember("Password changed", "Please sign in again with your new password.");
+      } catch (e) {
+        if (closed.caught(e)) return;
+        setPasswordError(e instanceof ApiError || e instanceof Error ? e.message : "Could not change your password.");
+      }
+    });
   };
 
-  const setPreference = async (key: keyof NotificationPreferences, value: boolean) => {
+  const savePreference = async (key: keyof NotificationPreferences, value: boolean) => {
     setFlipped((f) => ({ ...f, [key]: value }));
-    setSavingPref(key);
     try {
       await api<{ message?: string }>("/user/notification-preferences", {
         method: "PUT",
@@ -251,21 +257,23 @@ export default function Profile() {
       setFlipped((f) => ({ ...f, [key]: !value }));
       if (closed.caught(e)) return;
       setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not save that." });
-    } finally {
-      setSavingPref(null);
     }
   };
+  const setPreference = (key: keyof NotificationPreferences, value: boolean) => pref.run(key, () => savePreference(key, value));
 
-  const confirmSignOut = async () => {
-    const sure = await confirmAction({
-      title: "Sign out?",
-      message: "You will need your username and password to get back in.",
-      confirm: "Sign out",
-      cancel: "Stay signed in",
-      destructive: true,
-    });
-    if (sure) await signOut();
-  };
+  const confirmSignOut = () =>
+    account.run(
+      "signOut",
+      () => signOut(),
+      () =>
+        confirmAction({
+          title: "Sign out?",
+          message: "You will need your username and password to get back in.",
+          confirm: "Sign out",
+          cancel: "Stay signed in",
+          destructive: true,
+        })
+    );
 
   // Deleting the account is final: the server removes it and releases the
   // username, so there is nothing to sign back in to. A membership that
@@ -273,69 +281,70 @@ export default function Profile() {
   // sign in to stop it afterwards -- and the member is told so before they
   // confirm. If the card company cannot be reached the server refuses (409
   // SUBSCRIPTION_ACTIVE) and nothing is deleted.
-  const deleteAccount = async () => {
-    const sure = await confirmAction({
-      title: "Delete your account?",
-      message:
-        `This permanently deletes your account at ${gymName || "your gym"} and your sign-in username. It cannot be undone.\n\n` +
-        "If your membership renews by card, it is cancelled as part of this, so you will not be charged again.",
-      confirm: "Delete my account",
-      cancel: "Keep my account",
-      destructive: true,
-    });
-    if (!sure) return;
-    setDeleting(true);
-    setMessage(null);
-    try {
-      await api<{ message?: string }>("/user", { method: "DELETE", session, onUnauthorised: signOut });
-      // The account is gone, and this session with it. Sign-out takes the
-      // phone off the gym's notification list before it clears anything.
-      await signOut();
-      await tellMember("Account deleted", "Your account has been deleted.");
-    } catch (e) {
-      if (closed.caught(e)) return;
-      setMessage({
-        tone: "error",
-        text:
-          e instanceof ApiError && e.code === "SUBSCRIPTION_ACTIVE"
-            ? "Your account has not been deleted. Your membership renews by card and it could not be cancelled just now. Please try again in a few minutes, or ask the front desk to cancel the membership first."
-            : e instanceof ApiError || e instanceof Error
-              ? e.message
-              : "Could not delete your account.",
-      });
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const deleteAccount = () =>
+    account.run(
+      "delete",
+      async () => {
+        setMessage(null);
+        try {
+          await api<{ message?: string }>("/user", { method: "DELETE", session, onUnauthorised: signOut });
+          // The account is gone, and this session with it. Sign-out takes the
+          // phone off the gym's notification list before it clears anything.
+          await signOut();
+          await tellMember("Account deleted", "Your account has been deleted.");
+        } catch (e) {
+          if (closed.caught(e)) return;
+          setMessage({
+            tone: "error",
+            text:
+              e instanceof ApiError && e.code === "SUBSCRIPTION_ACTIVE"
+                ? "Your account has not been deleted. Your membership renews by card and it could not be cancelled just now. Please try again in a few minutes, or ask the front desk to cancel the membership first."
+                : e instanceof ApiError || e instanceof Error
+                  ? e.message
+                  : "Could not delete your account.",
+          });
+        }
+      },
+      () =>
+        confirmAction({
+          title: "Delete your account?",
+          message:
+            `This permanently deletes your account at ${gymName || "your gym"} and your sign-in username. It cannot be undone.\n\n` +
+            "If your membership renews by card, it is cancelled as part of this, so you will not be charged again.",
+          confirm: "Delete my account",
+          cancel: "Keep my account",
+          destructive: true,
+        })
+    );
 
   // The member withdrawing their consent to face check-in. The server deletes
   // the face template outright; the desk can add it again, with consent, if
   // they change their mind.
-  const removeFace = async () => {
-    if (removingFace) return;
-    const sure = await confirmAction({
-      title: "Remove your face data?",
-      message:
-        "The front desk will no longer recognise your face. You can still check in by scanning the code at the desk, or ask the desk to add your face again later.",
-      confirm: "Remove",
-      cancel: "Keep it",
-      destructive: true,
-    });
-    if (!sure) return;
-    setRemovingFace(true);
-    setFaceAnswer(null);
-    try {
-      await api<{ success: boolean; removed: number }>("/api/attendance/me/face", { method: "DELETE", session, onUnauthorised: signOut });
-      setFaceAnswer({ tone: "ok", text: "Your face data has been removed. The front desk can no longer check you in by face." });
-      setFaceRemovedFrom(face.data?.data ?? null);
-      face.reload();
-    } catch (e) {
-      if (closed.caught(e)) return;
-      setFaceAnswer({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not remove your face data. Please try again." });
-    } finally {
-      setRemovingFace(false);
-    }
-  };
+  const removeFace = () =>
+    faceRemoval.run(
+      "remove",
+      async () => {
+        setFaceAnswer(null);
+        try {
+          await api<{ success: boolean; removed: number }>("/api/attendance/me/face", { method: "DELETE", session, onUnauthorised: signOut });
+          setFaceAnswer({ tone: "ok", text: "Your face data has been removed. The front desk can no longer check you in by face." });
+          setFaceRemovedFrom(face.data?.data ?? null);
+          face.reload();
+        } catch (e) {
+          if (closed.caught(e)) return;
+          setFaceAnswer({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not remove your face data. Please try again." });
+        }
+      },
+      () =>
+        confirmAction({
+          title: "Remove your face data?",
+          message:
+            "The front desk will no longer recognise your face. You can still check in by scanning the code at the desk, or ask the desk to add your face again later.",
+          confirm: "Remove",
+          cancel: "Keep it",
+          destructive: true,
+        })
+    );
 
   const loadedFace = face.data?.data;
   const faceStatus: FaceStatus | undefined =
@@ -361,10 +370,12 @@ export default function Profile() {
           <Body style={{ fontSize: 14 }}>{label}</Body>
           {hint ? <Caption>{hint}</Caption> : null}
         </View>
+        {pref.busy === key ? <ActivityIndicator size="small" color={p.accent} /> : null}
         <Switch
           value={!!prefs[key]}
           onValueChange={(v) => setPreference(key, v)}
-          disabled={savingPref === key}
+          disabled={!!pref.busy}
+          accessibilityState={{ busy: pref.busy === key }}
           trackColor={{ true: p.accent, false: p.border }}
           thumbColor="#ffffff"
           accessibilityLabel={label}
@@ -378,18 +389,17 @@ export default function Profile() {
   // a phone that refused permission, or could not be registered, must not
   // look as if it will buzz. Switching it on tries the registration again.
   const pushOn = canPush && pushState === "on" && !!prefs?.push;
-  const togglePush = async (value: boolean) => {
-    if (!value) return setPreference("push", false);
-    if (pushState !== "on") {
-      if (!session) return;
-      setSavingPref("push");
-      const now = await registerForPush(session).catch(() => "failed" as const);
-      setSavingPref(null);
-      // Still not reachable: the row's own words say why, and what to do.
-      if (now !== "on") return;
-    }
-    if (!prefs?.push) await setPreference("push", true);
-  };
+  const togglePush = (value: boolean) =>
+    pref.run("push", async () => {
+      if (!value) return savePreference("push", false);
+      if (pushState !== "on") {
+        if (!session) return;
+        const now = await registerForPush(session).catch(() => "failed" as const);
+        // Still not reachable: the row's own words say why, and what to do.
+        if (now !== "on") return;
+      }
+      if (!prefs?.push) await savePreference("push", true);
+    });
   const pushRow = () =>
     prefs ? (
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6, gap: space.lg }}>
@@ -400,18 +410,22 @@ export default function Profile() {
           ) : pushState === "blocked" ? (
             <>
               <Caption>Notifications are switched off for this app in your phone&apos;s settings. Switch them on there, then switch this on.</Caption>
-              <Pressable onPress={() => openPhoneSettings("notifications")} hitSlop={8} accessibilityRole="link" style={{ marginTop: 4, alignSelf: "flex-start" }}>
-                <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>Open phone settings ›</Body>
+              <Pressable {...opens("settings", () => openPhoneSettings("notifications"))} hitSlop={8} accessibilityRole="link" style={{ marginTop: 4, alignSelf: "flex-start" }}>
+                <WithSpinner busy={leaving.busy === "settings"} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>Open phone settings ›</Body>
+                </WithSpinner>
               </Pressable>
             </>
           ) : pushState === "failed" ? (
             <Caption>Notifications could not be set up on this phone. Switch this on to try again.</Caption>
           ) : null}
         </View>
+        {pref.busy === "push" ? <ActivityIndicator size="small" color={p.accent} /> : null}
         <Switch
           value={pushOn}
           onValueChange={togglePush}
-          disabled={!canPush || savingPref === "push"}
+          disabled={!canPush || !!pref.busy}
+          accessibilityState={{ busy: pref.busy === "push" }}
           trackColor={{ true: p.accent, false: p.border }}
           thumbColor="#ffffff"
           accessibilityLabel="Notifications on this phone"
@@ -508,7 +522,7 @@ export default function Profile() {
             multiline
             hint="Your trainer sees this."
           />
-          <Button label="Save" onPress={save} busy={busy} />
+          <Button label="Save" onPress={save} busy={account.busy === "save"} disabled={!!account.busy} />
           <Button label="Cancel" variant="quiet" onPress={() => setEditing(false)} style={{ marginTop: space.sm }} />
         </Card>
       ) : (
@@ -523,8 +537,16 @@ export default function Profile() {
           {emailUnconfirmed ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 4 }}>
               <Caption>Email not confirmed.</Caption>
-              <Pressable onPress={sendConfirmation} disabled={sendingLink} hitSlop={8} accessibilityRole="button" accessibilityState={{ busy: sendingLink }}>
-                <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>{sendingLink ? "Sending…" : "Send the link again"}</Body>
+              <Pressable
+                onPress={sendConfirmation}
+                disabled={sendingLink}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityState={{ busy: sendingLink, disabled: sendingLink }}
+              >
+                <WithSpinner busy={sendingLink} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>{sendingLink ? "Sending…" : "Send the link again"}</Body>
+                </WithSpinner>
               </Pressable>
             </View>
           ) : null}
@@ -577,7 +599,7 @@ export default function Profile() {
           </Caption>
         ) : null}
         {faceStatus?.enrolled ? (
-          <Button label="Remove my face data" variant="danger" onPress={removeFace} busy={removingFace} style={{ marginTop: space.lg }} />
+          <Button label="Remove my face data" variant="danger" onPress={removeFace} busy={!!faceRemoval.busy} style={{ marginTop: space.lg }} />
         ) : null}
         {faceAnswer ? (
           <Caption style={{ color: faceAnswer.tone === "ok" ? p.success : p.danger, marginTop: space.sm }}>{faceAnswer.text}</Caption>
@@ -592,37 +614,65 @@ export default function Profile() {
         </View>
         {phone ? (
           <Pressable
-            onPress={() => openApp(`tel:${phone.replace(/[^\d+]/g, "")}`, `This phone cannot make calls. Your gym's number is ${phone}.`)}
+            {...opens("phone", () => openApp(`tel:${phone.replace(/[^\d+]/g, "")}`, `This phone cannot make calls. Your gym's number is ${phone}.`))}
             accessibilityRole="link"
             accessibilityLabel={`Call your gym on ${phone}`}
           >
-            <Line label="Phone" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{phone}</Body>} />
+            <Line
+              label="Phone"
+              value={
+                <WithSpinner busy={leaving.busy === "phone"} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "600" }}>{phone}</Body>
+                </WithSpinner>
+              }
+            />
           </Pressable>
         ) : null}
         {email ? (
           <Pressable
-            onPress={() => openApp(`mailto:${email}`, `There is no email app set up on this phone. Your gym's address is ${email}.`)}
+            {...opens("email", () => openApp(`mailto:${email}`, `There is no email app set up on this phone. Your gym's address is ${email}.`))}
             accessibilityRole="link"
             accessibilityLabel={`Email your gym at ${email}`}
           >
-            <Line label="Email" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{email}</Body>} />
+            <Line
+              label="Email"
+              value={
+                <WithSpinner busy={leaving.busy === "email"} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "600" }}>{email}</Body>
+                </WithSpinner>
+              }
+            />
           </Pressable>
         ) : null}
         {contact?.address ? <Line label="Address" value={contact.address} /> : null}
         {branding?.whatsapp ? (
           <Pressable
-            onPress={() =>
+            {...opens("whatsapp", () =>
               openApp(`https://wa.me/${branding.whatsapp.replace(/[^0-9]/g, "")}`, `WhatsApp could not be opened on this phone. Your gym's WhatsApp number is ${branding.whatsapp}.`)
-            }
+            )}
             accessibilityRole="link"
             accessibilityLabel="Message your gym on WhatsApp"
           >
-            <Line label="WhatsApp" value={<Body style={{ color: p.accent, fontWeight: "600" }}>Message the gym</Body>} />
+            <Line
+              label="WhatsApp"
+              value={
+                <WithSpinner busy={leaving.busy === "whatsapp"} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "600" }}>Message the gym</Body>
+                </WithSpinner>
+              }
+            />
           </Pressable>
         ) : null}
         {siteUrl ? (
-          <Pressable onPress={() => openWeb(siteUrl)} accessibilityRole="link" accessibilityLabel="Open your gym's website">
-            <Line label="Website" value={<Body style={{ color: p.accent, fontWeight: "600" }}>{siteUrl.replace(/^https?:\/\//, "")}</Body>} />
+          <Pressable {...opens("website", () => openWeb(siteUrl))} accessibilityRole="link" accessibilityLabel="Open your gym's website">
+            <Line
+              label="Website"
+              value={
+                <WithSpinner busy={leaving.busy === "website"} colour={p.accent}>
+                  <Body style={{ color: p.accent, fontWeight: "600" }}>{siteUrl.replace(/^https?:\/\//, "")}</Body>
+                </WithSpinner>
+              }
+            />
           </Pressable>
         ) : null}
         {!phone && !email && !contact?.address && !branding?.whatsapp && !siteUrl ? (
@@ -675,7 +725,7 @@ export default function Profile() {
               secureTextEntry
               autoCapitalize="none"
             />
-            <Button label="Change password" onPress={changePassword} busy={busy} />
+            <Button label="Change password" onPress={changePassword} busy={account.busy === "password"} disabled={!!account.busy} />
             <Button
               label="Cancel"
               variant="quiet"
@@ -690,8 +740,8 @@ export default function Profile() {
           <RowLink label="Change your password" onPress={() => setChangingPassword(true)} />
         )}
 
-        <Button label="Sign out" variant="danger" onPress={confirmSignOut} style={{ marginTop: space.md }} />
-        <Button label="Delete my account" variant="quiet" onPress={deleteAccount} busy={deleting} disabled={busy} />
+        <Button label="Sign out" variant="danger" onPress={confirmSignOut} busy={account.busy === "signOut"} disabled={!!account.busy} style={{ marginTop: space.md }} />
+        <Button label="Delete my account" variant="quiet" onPress={deleteAccount} busy={account.busy === "delete"} disabled={!!account.busy} />
 
         <View style={{ alignItems: "center", marginTop: space.lg, gap: 2 }}>
           <Caption style={{ fontSize: 11 }}>{branding?.siteName || gymName}</Caption>
