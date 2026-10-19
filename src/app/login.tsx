@@ -21,6 +21,7 @@ import { Body, Button, Caption, Field, LegalLinks, Notice, Title } from "@/compo
 import { API_CONFIGURED, API_HINT, NOT_CONFIGURED_MESSAGE } from "@/lib/config";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 
 export default function Login() {
   const { signIn, completeTwoFactor, signOutReason } = useSession();
@@ -30,7 +31,12 @@ export default function Login() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Which request is out, so its button shows the spinner.
+  const action = useAsyncAction<"signIn" | "resend" | "verify">();
+  // Signed in and on the way to the gym: the button keeps its spinner until
+  // the next screen is up, rather than coming back for the moment it takes.
+  const [leaving, setLeaving] = useState(false);
+  const busy = !!action.busy || leaving;
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -41,7 +47,7 @@ export default function Login() {
 
   // The buttons go grey while a request is out, but the keyboard's own "go"
   // key does not: both steps refuse a second run until the first has answered.
-  const submit = async () => {
+  const submit = () => {
     if (busy) return;
     if (!username.trim() || !password) {
       setError("Enter the username and password your gym gave you.");
@@ -53,53 +59,53 @@ export default function Login() {
       setError("That looks like an email address. Sign in with the username your gym gave you instead, for example saramalik284.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await signIn(username, password);
-      if (result.requires2fa) {
-        if (!result.challengeId || !result.gymSlug) {
-          throw new Error("Your gym asks for a code by email, but the sign-in could not be started. Please try again.");
+    return action.run(challenge ? "resend" : "signIn", async () => {
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await signIn(username, password);
+        if (result.requires2fa) {
+          if (!result.challengeId || !result.gymSlug) {
+            throw new Error("Your gym asks for a code by email, but the sign-in could not be started. Please try again.");
+          }
+          setChallenge({ id: result.challengeId, gymSlug: result.gymSlug });
+          setCode("");
+          setNotice(result.message || "We emailed you a 6-digit code.");
+          return;
         }
-        setChallenge({ id: result.challengeId, gymSlug: result.gymSlug });
-        setCode("");
-        setNotice(result.message || "We emailed you a 6-digit code.");
-        return;
+        setLeaving(true);
+        router.replace("/(tabs)");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not sign you in.");
       }
-      router.replace("/(tabs)");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not sign you in.");
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
-  const verify = async () => {
+  const verify = () => {
     if (!challenge || busy) return;
     const digits = code.replace(/\D/g, "");
     if (digits.length !== 6) {
       setError("Enter the 6-digit code from your email.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      await completeTwoFactor(challenge.id, digits, challenge.gymSlug);
-      router.replace("/(tabs)");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "That code did not work.";
-      setError(message);
-      // A challenge that has expired, or died of too many wrong codes, cannot
-      // be retried: the server says so in as many words, and the member
-      // starts again from the password.
-      if (/sign in again/i.test(message)) {
-        setChallenge(null);
-        setNotice(null);
+    return action.run("verify", async () => {
+      setError(null);
+      try {
+        await completeTwoFactor(challenge.id, digits, challenge.gymSlug);
+        setLeaving(true);
+        router.replace("/(tabs)");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "That code did not work.";
+        setError(message);
+        // A challenge that has expired, or died of too many wrong codes, cannot
+        // be retried: the server says so in as many words, and the member
+        // starts again from the password.
+        if (/sign in again/i.test(message)) {
+          setChallenge(null);
+          setNotice(null);
+        }
       }
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
   const backToPassword = () => {
@@ -143,8 +149,8 @@ export default function Login() {
               onSubmitEditing={verify}
               style={{ letterSpacing: 6, fontSize: 22, textAlign: "center" }}
             />
-            <Button label="Verify" onPress={verify} busy={busy} />
-            <Button label="Send a new code" variant="secondary" onPress={submit} disabled={busy} style={{ marginTop: space.sm }} />
+            <Button label="Verify" onPress={verify} busy={action.busy === "verify" || leaving} disabled={busy} />
+            <Button label="Send a new code" variant="secondary" onPress={submit} busy={action.busy === "resend"} disabled={busy} style={{ marginTop: space.sm }} />
             <Button label="Back" variant="quiet" onPress={backToPassword} disabled={busy} style={{ marginTop: space.sm }} />
           </>
         ) : (
@@ -174,7 +180,7 @@ export default function Login() {
               onSubmitEditing={submit}
             />
 
-            <Button label="Sign in" onPress={submit} busy={busy} disabled={!API_CONFIGURED} />
+            <Button label="Sign in" onPress={submit} busy={action.busy === "signIn" || leaving} disabled={busy || !API_CONFIGURED} />
 
             <Pressable
               onPress={() => router.push("/forgot")}

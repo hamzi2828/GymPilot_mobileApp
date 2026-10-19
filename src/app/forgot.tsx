@@ -26,6 +26,7 @@ import { Body, Button, Caption, Field, Notice, Title } from "@/components/ui";
 import { forgotPassword } from "@/lib/api";
 import { usePalette } from "@/lib/session";
 import { space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 
 export default function Forgot() {
   const router = useRouter();
@@ -33,28 +34,28 @@ export default function Forgot() {
   const insets = useSafeAreaInsets();
 
   const [username, setUsername] = useState("");
-  const [busy, setBusy] = useState(false);
+  const action = useAsyncAction();
+  const busy = !!action.busy;
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
-  const submit = async () => {
+  const submit = () => {
     if (busy) return;
     if (!username.trim()) {
       setError("Enter the username your gym gave you.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      // The server's own sentence ("we emailed a reset link") is not shown:
-      // it is not true for an account with no address.
-      await forgotPassword(username);
-      setSent(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send a reset link right now.");
-    } finally {
-      setBusy(false);
-    }
+    return action.run("send", async () => {
+      setError(null);
+      try {
+        // The server's own sentence ("we emailed a reset link") is not shown:
+        // it is not true for an account with no address.
+        await forgotPassword(username);
+        setSent(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not send a reset link right now.");
+      }
+    });
   };
 
   return (
