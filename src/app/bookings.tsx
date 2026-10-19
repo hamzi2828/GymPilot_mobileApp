@@ -15,6 +15,11 @@ import type { BookingRecord, BookingsResponse } from "@/lib/types";
 
 type Tone = "neutral" | "good" | "warn" | "bad";
 
+// The server sends the newest 200 past bookings at most. A member with more
+// than that sees the totals for those, said as such, not as every class
+// they ever booked.
+const SERVER_LIMIT = 200;
+
 /** What each status is called to a member, and how loudly. */
 function statusOf(b: BookingRecord): { label: string; tone: Tone } {
   if (b.status === "cancelled") return b.late_cancel ? { label: "cancelled late", tone: "bad" } : { label: "cancelled", tone: "neutral" };
@@ -44,6 +49,7 @@ export default function Bookings() {
   const attended = rows.filter((b) => b.status === "attended").length;
   const missed = rows.filter((b) => b.status === "no_show").length;
   const late = rows.filter((b) => b.status === "cancelled" && b.late_cancel).length;
+  const capped = rows.length >= SERVER_LIMIT;
 
   return (
     <Screen title="Your bookings" subtitle="Classes you booked before today" refreshing={history.refreshing} onRefresh={history.reload}>
@@ -64,6 +70,7 @@ export default function Bookings() {
               <Stat value={missed} label="missed" />
               <Stat value={late} label="cancelled late" />
             </View>
+            {capped ? <Caption style={{ marginTop: space.md }}>In your last {SERVER_LIMIT} bookings.</Caption> : null}
           </Card>
 
           <View style={{ gap: space.sm }}>
