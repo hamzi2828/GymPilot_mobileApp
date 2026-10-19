@@ -40,6 +40,12 @@ const SESSION_OVER = new Set(["TOKEN_MISSING", "TOKEN_INVALID", "TOKEN_WRONG_GYM
 
 export const SESSION_ENDED_MESSAGE = "Your session ended. Please sign in again.";
 
+// The server could not check the session at all -- its database is down, say
+// -- and answers 503 SERVICE_UNAVAILABLE. Nothing is wrong with the token, so
+// this is never a sign-out (only the 401s above are): the screen shows its
+// usual "try again", in these words rather than a bare status.
+const SERVER_TROUBLE_MESSAGE = "Your gym's server is having trouble right now. Please try again in a moment.";
+
 // The server's names for "the whole gym is closed to its members right now":
 // suspended by the platform, its GymsPilotPro subscription lapsed, or the
 // member app switched off for it. Every request fails the same way then, so
@@ -138,12 +144,10 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 
   if (!response.ok) {
     const code = typeof payload.code === "string" ? payload.code : undefined;
-    const message =
-      tenant && isGymGone(code)
-        ? GYM_GONE_MESSAGE
-        : typeof payload.message === "string"
-          ? payload.message
-          : `Something went wrong (${response.status}).`;
+    const said = typeof payload.message === "string" && payload.message ? payload.message : "";
+    let message = said || `Something went wrong (${response.status}).`;
+    if (tenant && isGymGone(code)) message = GYM_GONE_MESSAGE;
+    else if (code === "SERVICE_UNAVAILABLE" || (response.status >= 500 && !said)) message = SERVER_TROUBLE_MESSAGE;
     throw new ApiError(message, response.status, code, typeof payload.error === "string" ? payload.error : undefined);
   }
 
