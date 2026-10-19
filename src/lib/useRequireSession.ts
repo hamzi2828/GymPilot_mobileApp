@@ -4,7 +4,7 @@
 // while the screen is up -- the member signed out, or the server refused the
 // token -- the screen sends them to sign in. Only the screen the member is
 // actually looking at does the sending: hanging it off focus rather than off
-// render means a check-in code open over the tabs does not race the tabs
+// render means the check-in scanner open over the tabs does not race the tabs
 // underneath it to the same destination.
 
 import { useCallback } from "react";

@@ -46,12 +46,16 @@ export async function openWeb(url: string): Promise<void> {
   }
 }
 
-/** This app's page in the phone's own settings, where notifications are switched on. */
-export async function openPhoneSettings(): Promise<void> {
+/**
+ * This app's page in the phone's own settings, where notifications and the
+ * camera are switched on. `what` is the one the member went there for, so a
+ * phone that cannot open the page still tells them what to look for.
+ */
+export async function openPhoneSettings(what: "notifications" | "the camera"): Promise<void> {
   try {
     await Linking.openSettings();
   } catch {
-    await tellMember("Could not open settings", "Open your phone's Settings, find this app, and switch notifications on there.");
+    await tellMember("Could not open settings", `Open your phone's Settings, find this app, and switch ${what} on there.`);
   }
 }
 

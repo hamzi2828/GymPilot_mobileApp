@@ -357,7 +357,7 @@ export default function Profile() {
           ) : pushState === "blocked" ? (
             <>
               <Caption>Notifications are switched off for this app in your phone&apos;s settings. Switch them on there, then switch this on.</Caption>
-              <Pressable onPress={openPhoneSettings} hitSlop={8} accessibilityRole="link" style={{ marginTop: 4, alignSelf: "flex-start" }}>
+              <Pressable onPress={() => openPhoneSettings("notifications")} hitSlop={8} accessibilityRole="link" style={{ marginTop: 4, alignSelf: "flex-start" }}>
                 <Body style={{ color: p.accent, fontWeight: "700", fontSize: 13 }}>Open phone settings ›</Body>
               </Pressable>
             </>
@@ -577,7 +577,7 @@ export default function Profile() {
       <View style={{ gap: space.sm }}>
         <RowLink label="Your visits" onPress={() => router.push("/attendance")} />
         <RowLink label="Your past bookings" onPress={() => router.push("/bookings")} />
-        <RowLink label="Your check-in code" onPress={() => router.push("/checkin")} />
+        <RowLink label="Scan to check in" onPress={() => router.push("/checkin")} />
 
         {changingPassword ? (
           <Card>

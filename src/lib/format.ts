@@ -48,16 +48,3 @@ export function timeRange(start: string, end: string): string {
 export function initials(first?: string, last?: string): string {
   return `${(first || "").charAt(0)}${(last || "").charAt(0)}`.toUpperCase() || "?";
 }
-
-/** "2 days", "5 hours", "12 minutes", "under a minute" — how long is left. */
-export function timeLeft(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const ms = new Date(iso).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return "";
-  const minutes = Math.floor(ms / 60000);
-  if (minutes < 1) return "under a minute";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
-  return `${Math.round(hours / 24)} days`;
-}

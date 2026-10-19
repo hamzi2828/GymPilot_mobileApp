@@ -116,13 +116,40 @@ export interface AttendanceResponse {
   note: string | null;
 }
 
-/** GET /api/attendance/me/qr */
-export interface CheckInCode {
-  token: string;
-  expires_at: string;
-  person_type: "member" | "staff";
-  code: string;
-  name: string;
+/**
+ * POST /api/attendance/me/checkin: the answer the front desk gets for a
+ * punch, in the same shape. Exactly one of these describes it: `success`
+ * (recorded -- `detail.action` says in or out), `ignored` (already checked in
+ * or out a moment ago: nothing recorded, and nothing wrong), `refused`
+ * (turned away under the gym's entry rules, with the reason in `message`).
+ */
+export interface CheckInAnswer {
+  success: boolean;
+  message: string;
+  detail: CheckInReceipt | null;
+  /** The answer to an attempt sent again with its request_id: nothing new was recorded. */
+  repeated?: boolean;
+  ignored?: boolean;
+  refused?: boolean;
+  /** ENTRY_REFUSED, beside `refused`. */
+  code?: string;
+  /** The refusal's machine key: no_package, expired, unpaid. */
+  reason?: string;
+}
+
+/** The parts of the desk's receipt the app shows. Times are the gym's own labels ("06:42 PM"). */
+export interface CheckInReceipt {
+  /** check_in or check_out; ignore or refused when nothing was recorded. */
+  action: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  worked_label: string | null;
+  /**
+   * "Balance due £40" when money is still owed on the membership, else null.
+   * (The receipt's `warning` is left out on purpose: it is advice for the
+   * desk -- "offer a renewal" -- not words for the member.)
+   */
+  balance_due_label?: string | null;
 }
 
 /** GET /api/gymfolio/timetable → data[] */

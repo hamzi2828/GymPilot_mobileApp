@@ -1,5 +1,6 @@
 // Home: what a member wants at the door — am I paid up, when is my next
-// class, and the code that opens it. And whatever the gym has to say today.
+// class, and the way in: scanning the code at the front desk. And whatever
+// the gym has to say today.
 
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -95,7 +96,7 @@ export default function Home() {
             onPress={() => router.push("/checkin")}
             accessibilityRole="button"
             accessibilityLabel={summary?.checked_in_now ? "Check in. You are inside right now." : "Check in"}
-            accessibilityHint="Shows the code to scan at the front desk"
+            accessibilityHint="Opens the camera to scan the code on the screen at the front desk"
             style={({ pressed }) => ({
               backgroundColor: p.accent,
               opacity: pressed ? 0.9 : 1,
@@ -111,7 +112,7 @@ export default function Home() {
             <View style={{ flex: 1 }}>
               <Body style={{ color: p.onAccent, fontWeight: "800", fontSize: 16 }}>Check in</Body>
               <Body style={{ color: p.onAccent, opacity: 0.75, fontSize: 13 }}>
-                {summary?.checked_in_now ? "You are inside right now" : "Show this at the front desk"}
+                {summary?.checked_in_now ? "You are inside right now" : "Scan the code at the front desk"}
               </Body>
             </View>
           </Pressable>

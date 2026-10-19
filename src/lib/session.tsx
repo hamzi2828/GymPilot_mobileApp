@@ -6,7 +6,6 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, login as loginRequest, loginTwoFactor as twoFactorRequest, type Session } from "./api";
-import { clearSavedCode } from "./checkinCode";
 import { registerForPush, unregisterPush } from "./push";
 import { getItem, removeItem, setItem } from "./storage";
 import { paletteFrom, type Palette } from "./theme";
@@ -27,6 +26,10 @@ const LOOK_KEY = "gympilot.gym";
 // Where an earlier build kept everything in one record. Nothing reads it
 // now; it is only deleted, so an old token does not sit in the keychain.
 const LEGACY_KEY = "gympilot.session";
+// Where earlier builds kept the member's own check-in QR for the desk to
+// scan. Members now scan the desk's code instead, so the server no longer
+// takes that QR; it is only deleted, like the record above.
+const OLD_CHECKIN_KEY = "gympilot.checkin";
 
 /** The member's own record, in the shape sign-in hands back. */
 function memberFrom(p: Profile, before: Member | null): Member {
@@ -98,8 +101,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    // Once per launch; harmless when it is already gone.
+    // Once per launch; harmless when they are already gone.
     void removeItem(LEGACY_KEY);
+    void removeItem(OLD_CHECKIN_KEY);
     Promise.all([getItem(AUTH_KEY), getItem(USER_KEY), getItem(LOOK_KEY)])
       .then(([authRaw, userRaw, lookRaw]) => {
         if (cancelled) return;
@@ -187,9 +191,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         void api("/user/logout", { method: "POST", session: { token: ending.token, gymSlug: ending.gymSlug } }).catch(() => {});
       }
       setSignOutReason(reason || null);
-      // The saved check-in code goes with the session: it is the member's
-      // way through the door, and must not outlive their sign-in here.
-      await Promise.all([persist(null), clearSavedCode()]);
+      await persist(null);
     },
     [persist]
   );

@@ -17,7 +17,7 @@ only way in is a username the gym issued.
 | **Classes**    | The gym's timetable, day by day. Book a class, join the waitlist when it is full, cancel a booking — with a warning when the cancel is a late one. |
 | **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — any balance still owed, changing the card it renews on, and a way to the website for plans and invoice PDFs. |
 | **Profile**    | Their details, their sign-in username, notification switches, the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
-| **Check in**   | A QR code the front desk scans, with how long it works for and a typed fallback number. The last code is kept on the phone, so it still shows with no signal at the door. |
+| **Check in**   | The camera, pointed at the code on the screen at the front desk: checked in (or out) there and then, with the answer on the screen — or why not. The camera is asked for only after saying why, and a member who said no is shown how to switch it on again. |
 | **Visits**     | Every visit the desk has recorded, month by month. |
 | **Bookings**   | Every class they booked before today: attended, missed, cancelled, cancelled late. |
 
@@ -149,12 +149,22 @@ the member, and the branding — so a branding record too big for Android's
 keychain cannot take the member's name with it. A reply that comes back after
 a sign-out is dropped rather than written back.
 
-The last check-in code is a fourth entry (`src/lib/checkinCode.ts`), stored
-with the gym and member it belongs to. The server's codes last two days, so
-the check-in screen shows the saved one at once while it fetches a newer one,
-and keeps showing it — marked "Saved code" — when the server cannot be
-reached. It is never shown past its expiry or to a different member, it is
-dropped if the server refuses to issue a code, and sign-out deletes it.
+## Checking in
+
+The front desk shows a QR code on a screen that changes every minute. It holds
+the gym website's address, `https://<gym site>/checkin?c=GPD1.…`, so a phone's
+ordinary camera opens the website's check-in page. The app reads the same
+code with its own camera (`src/app/checkin.tsx`), takes `c` out of the address
+(or a bare `GPD1.` code as it is; anything else is "That isn't your gym's
+check-in code" without asking the server) and sends
+`POST /api/attendance/me/checkin { code, request_id }` with the member's
+sign-in. The answer is the desk's own: checked in, checked out, "already
+checked in a moment ago", or refused with the gym's reason.
+
+Each scan gets a fresh `request_id`; **Try again** after a lost answer sends
+the same one, so the server repeats its first answer instead of recording a
+check-out. Nothing about the camera is kept: no picture leaves the phone, and
+earlier builds' saved member QR (the old way in) is deleted on launch.
 
 ## Push notifications
 
@@ -312,7 +322,7 @@ src/
     index.tsx             signed in? → tabs, otherwise → login
     login.tsx             username + password, the 2FA code step, no sign-up
     forgot.tsx            username → reset link by email
-    checkin.tsx           the QR code for the front desk
+    checkin.tsx           the camera, scanning the code on the front desk's screen
     attendance.tsx        every recorded visit
     bookings.tsx          every past class booking
     (tabs)/               home, classes, membership, profile
@@ -330,7 +340,7 @@ src/
     format.ts             money, dates, durations
     useLoad.ts            loading / error / pull to refresh, reloaded quietly on focus, only the latest answer kept
     storage.ts            SecureStore on a device, localStorage on web
-    checkinCode.ts        the last check-in code, kept for when there is no signal
+    deskCode.ts           the desk's code out of what the camera read, and a request id per scan
     config.ts             EXPO_PUBLIC_API_URL, and whether this build has a real one; the privacy and terms addresses
     open.ts               web pages and other apps, opened so that a failure says so
 ```
@@ -349,7 +359,7 @@ the tenant header:
 | `POST` · `DELETE /api/mobile/push/register` | this phone's Expo push token, on sign-in and sign-out (the `DELETE` needs only the gym slug, no sign-in) |
 | `GET /userDetailForProfile` · `PUT /update/user` · `PUT /user/change-password` · `DELETE /user` | the member's own record, and deleting it (these sit at the server root, not under `/api`) |
 | `GET` · `PUT /user/notification-preferences` · `GET /announcements/active` | how they want to hear from the gym, and what the gym is saying (also at the root) |
-| `GET /api/attendance/me` · `GET /api/attendance/me/qr` | visits, and the check-in code |
+| `GET /api/attendance/me` · `POST /api/attendance/me/checkin` | visits, and checking in with the code scanned at the desk |
 | `GET /api/gymfolio/timetable` · `POST /api/gymfolio/bookings` · `DELETE /api/gymfolio/bookings/:id` · `GET /api/gymfolio/bookings/me?scope=past` | classes, and the booking history |
 | `GET /api/gymfolio/package-orders/me` · `GET /api/gymfolio/membership/rules` · `GET /api/gymfolio/packages/active` | the membership |
 | `POST /api/gymfolio/package-orders/:id/{freeze,unfreeze,cancel,resume}` | pausing, cancelling, and undoing a cancellation |
