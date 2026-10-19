@@ -176,6 +176,10 @@ export default function Membership() {
   // for this member and this order only, and it opens over the app: no
   // website, and no second sign-in. When the browser closes, the list is
   // read again -- a new card usually clears a failed payment within moments.
+  // On iOS that is the reload below. Android cannot tell when its browser
+  // closes, so that reload runs at once; the one that counts there is the
+  // app coming back to the foreground, which reads the screen again
+  // (useLoad).
   const CARD = "Update my card";
   const openBilling = async (o: MembershipOrder) => {
     if (acting.current) return;

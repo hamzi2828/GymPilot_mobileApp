@@ -2,9 +2,9 @@
 // class, and the way in: scanning the code at the front desk. And whatever
 // the gym has to say today.
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Pressable, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { GymMark, Screen } from "@/components/Screen";
 import { QrIcon } from "@/components/icons";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, Loading, Notice, Pill, Stat, Title, WithSpinner } from "@/components/ui";
@@ -14,6 +14,7 @@ import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useAsyncAction } from "@/lib/useAsyncAction";
+import { useClock } from "@/lib/useClock";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { Announcement, AttendanceSummary, MembershipOrder, TimetableResponse } from "@/lib/types";
 
@@ -47,23 +48,20 @@ export default function Home() {
     site.run(path, async () => {
       if (siteUrl) await openWeb(webAddress(siteUrl, path));
     });
-  // The clock, read when the screen opens rather than on every render.
-  const [openedAt, setOpenedAt] = useState(0);
-  useFocusEffect(
-    useCallback(() => {
-      setOpenedAt(Date.now());
-    }, [])
-  );
+  // The clock, read when the screen opens, every minute while it is open and
+  // on coming back to the app -- not only when the tab was last opened, which
+  // could be this morning.
+  const now = useClock();
 
   // Soonest first, and only what is still to come: "your next classes" is a
   // promise about the future.
   const mine = useMemo(
     () =>
       (timetable.data?.data || [])
-        .filter((s) => s.my_booking && s.my_booking.status !== "cancelled" && new Date(s.starts_at).getTime() >= openedAt)
+        .filter((s) => s.my_booking && s.my_booking.status !== "cancelled" && new Date(s.starts_at).getTime() >= now)
         .sort((a, b) => String(a.starts_at || "").localeCompare(String(b.starts_at || "")))
         .slice(0, 3),
-    [timetable.data, openedAt]
+    [timetable.data, now]
   );
   const summary = attendance.data?.summary;
   const notices = announcements.data?.data || [];

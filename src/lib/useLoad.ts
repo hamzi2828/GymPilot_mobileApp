@@ -1,6 +1,7 @@
 // Fetch something for the signed-in member: loading, error, pull to refresh,
-// and a quiet reload when the screen comes back into focus. Every screen
-// needs the same four things, so none of them writes it out again.
+// and a quiet reload when the screen comes back into focus or the app comes
+// back from the background. Every screen needs the same things, so none of
+// them writes it out again.
 //
 // The fetch hangs off focus rather than off mount. Focus fires on the first
 // mount too, so that is one code path instead of two -- and one request on
@@ -10,6 +11,7 @@ import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { api, ApiError, GYM_GONE_MESSAGE, isGymClosed, isGymGone } from "./api";
 import { useSession } from "./session";
+import { useOnForeground } from "./useForeground";
 
 export function useLoad<T>(path: string | null, deps: unknown[] = []) {
   const { session, signOut } = useSession();
@@ -91,6 +93,13 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [run])
   );
+
+  // Back in the app after a while away, with this screen in view: what it
+  // shows may have changed meanwhile (a card changed in the browser, a class
+  // booked at the desk), so it is asked for again, quietly.
+  useOnForeground(() => {
+    run(loadedOnce.current ? "quiet" : "first");
+  });
 
   return {
     data,
