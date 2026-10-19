@@ -26,7 +26,9 @@
       "predictiveBackGestureEnabled": false,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -54,6 +56,14 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#6366F1"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow GymsPilotPro to use your camera to scan the check-in code at your gym's front desk.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ]
     ],

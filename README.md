@@ -267,7 +267,11 @@ Already set, nothing to do:
   `notification-icon.png` (white on transparent) for Android's status bar. To
   change the mark, export the same sizes over these files.
 - **Store declarations.** The app is always dark (`userInterfaceStyle`).
-  Android asks for no storage permissions (`android.blockedPermissions`); iOS
+  The camera is the one thing it asks for, to scan the check-in code (the
+  `expo-camera` plugin's `cameraPermission` is the text iOS shows); there is
+  no microphone (`microphonePermission: false`, `recordAudioAndroid: false`).
+  Android's `android.blockedPermissions` strips storage, `RECORD_AUDIO` and
+  the template's `SYSTEM_ALERT_WINDOW` from the manifest; iOS
   declares that it uses no encryption beyond HTTPS
   (`ios.config.usesNonExemptEncryption: false`), so App Store Connect does not
   ask at every upload. Secure Store is configured without a Face ID prompt,
