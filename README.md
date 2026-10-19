@@ -13,10 +13,10 @@ only way in is a username the gym issued.
 
 | Screen         | What it is for |
 | -------------- | -------------- |
-| **Home**       | Check in, the gym's announcements, the membership at a glance, the next classes they booked, and how much they have trained. |
+| **Home**       | Check in, the gym's announcements, a payment due, the membership at a glance, the next classes they booked, and how much they have trained. |
 | **Classes**    | The gym's timetable, day by day. Book a class, join the waitlist when it is full, cancel a booking — with a warning when the cancel is a late one. |
-| **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — any balance still owed, changing the card it renews on, and a way to the website for plans and invoice PDFs. |
-| **Profile**    | Their details, their sign-in username, notification switches, whether the desk can check them in by face (and removing their face data), the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
+| **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — any balance still owed, paying a renewal that is due from its payment link, changing the card it renews on, and a way to the website for plans and invoice PDFs. |
+| **Profile**    | Their details, their sign-in username, notification switches, a card saved for automatic payments (and turning that off), whether the desk can check them in by face (and removing their face data), the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
 | **Check in**   | The camera, pointed at the code on the screen at the front desk: checked in (or out) there and then, with the answer on the screen — or why not. The camera is asked for only after saying why, and a member who said no is shown how to switch it on again. |
 | **Visits**     | Every visit the desk has recorded, month by month. |
 | **Bookings**   | Every class they booked before today: attended, missed, cancelled, cancelled late. |
@@ -141,6 +141,26 @@ when a renewal failed) and **Change my card** (on any membership that renews by
 card) call `POST /api/gymfolio/package-orders/:id/billing-portal` and open the
 address it returns — the payment provider's own billing page — over the app,
 with no second sign-in.
+
+A renewal the gym wants paid online (a gym on Safepay sets one up shortly
+before the current term ends) comes back from `GET /api/gymfolio/package-orders/me`
+as a pending order with `pay_link_url` — the gym website's `/pay/<token>` page,
+where the link itself is the sign-in — and `metadata.dueDate` /
+`metadata.lastDay`. Membership shows it first as **Payment due** (amount, due
+date, last day to pay; overdue once the due date has passed) with **Pay now**,
+which opens that page over the app; Home shows a short banner leading there.
+When the browser closes the orders are read again (on Android, where the
+browser call returns at once, that is the app coming back to the foreground),
+so a paid renewal leaves the list with a thank-you in its place; until then
+the card says not to pay twice. Such an order is never listed as waiting for
+the front desk.
+
+A member who saved a card for automatic payments on the website sees it under
+**Profile → Automatic payments** (`GET /api/billing/me/saved-methods`: brand,
+last four digits, expiry, the date they agreed). **Turn off** asks first, then
+`DELETE /api/billing/me/saved-methods/:id` removes it and stops automatic
+payments at once; the answer is shown under the card. With no card saved, or a
+server from before automatic payments (404), there is no section at all.
 
 If the gym changes its scheme, the app picks it up the next time the member
 opens their profile (`GET /api/mobile/branding?gym=<slug>`), without a new
@@ -349,6 +369,7 @@ src/
     theme.ts              six tokens → a full palette
     types.ts              the shapes the API actually returns
     format.ts             money, dates, durations
+    membership.ts         which order is the membership, which are waiting on payment, which renewals are due to pay online
     useLoad.ts            loading / error / pull to refresh, reloaded quietly on focus, only the latest answer kept
     storage.ts            SecureStore on a device, localStorage on web
     deskCode.ts           the desk's code out of what the camera read, and a request id per scan
@@ -373,9 +394,10 @@ the tenant header:
 | `GET /api/attendance/me` · `POST /api/attendance/me/checkin` | visits, and checking in with the code scanned at the desk |
 | `GET` · `DELETE /api/attendance/me/face` | whether the desk holds their face for check-in, and withdrawing it |
 | `GET /api/gymfolio/timetable` · `POST /api/gymfolio/bookings` · `DELETE /api/gymfolio/bookings/:id` · `GET /api/gymfolio/bookings/me?scope=past` | classes, and the booking history |
-| `GET /api/gymfolio/package-orders/me` · `GET /api/gymfolio/membership/rules` · `GET /api/gymfolio/packages/active` | the membership |
+| `GET /api/gymfolio/package-orders/me` · `GET /api/gymfolio/membership/rules` · `GET /api/gymfolio/packages/active` | the membership (and a renewal's `pay_link_url`, opened in the browser) |
 | `POST /api/gymfolio/package-orders/:id/{freeze,unfreeze,cancel,resume}` | pausing, cancelling, and undoing a cancellation |
 | `POST /api/gymfolio/package-orders/:id/billing-portal` | a link to the payment provider's page for changing the card |
+| `GET` · `DELETE /api/billing/me/saved-methods[/:id]` | a card saved for automatic payments, and turning that off |
 
 The server decides what a member may do — how far ahead they can book, whether
 they may pause or cancel at all — and the app shows what it is told.
