@@ -37,6 +37,7 @@ import {
   endDateLabel,
   endedMemberships,
   isLive,
+  rejectedRecently,
   rejectionMessage,
   renewsAutomatically,
   SITE_ACCOUNT_HISTORY,
@@ -50,6 +51,7 @@ import { openWeb, webAddress } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useAsyncAction } from "@/lib/useAsyncAction";
+import { useClock } from "@/lib/useClock";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
 import type { MembershipOrder, PackageOnSale } from "@/lib/types";
 
@@ -74,6 +76,7 @@ export default function Membership() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [pausing, setPausing] = useState(false);
+  const now = useClock();
 
   const orders = useLoad<{ data: MembershipOrder[] }>("/api/gymfolio/package-orders/me?limit=20");
   const rules = useLoad<{ data: Rules }>("/api/gymfolio/membership/rules");
@@ -90,7 +93,7 @@ export default function Membership() {
   const alsoLive = list.filter((o) => o !== current && isLive(o));
   const waiting = awaitingPayment(list);
   // Receipts staff turned down in the last month: the member needs to know why.
-  const notAccepted = list.filter((o) => transferRejected(o) && Date.now() - new Date(o.createdAt).getTime() < 30 * 86400000);
+  const notAccepted = list.filter((o) => rejectedRecently(o, now));
   const past = endedMemberships(list);
   const r = rules.data?.data;
 

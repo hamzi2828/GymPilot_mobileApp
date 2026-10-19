@@ -103,6 +103,20 @@ export function transferRejected(o: MembershipOrder): boolean {
   return o.payment?.method === "bank_transfer" && o.payment?.status === "failed";
 }
 
+/** How long a receipt staff turned down stays on the Membership tab. */
+const REJECTION_SHOWN_MS = 30 * 86_400_000;
+
+/**
+ * Turned down in the last month, counted from when staff turned it down --
+ * an order can sit for weeks before anyone looks at its receipt -- or from
+ * the order date on an order that never recorded when.
+ */
+export function rejectedRecently(o: MembershipOrder, now: number): boolean {
+  if (!transferRejected(o)) return false;
+  const at = new Date(o.payment?.proof?.reviewedAt || o.createdAt).getTime();
+  return Number.isFinite(at) && now - at < REJECTION_SHOWN_MS;
+}
+
 /** What to tell the member about a receipt staff did not accept, with their reason. */
 export function rejectionMessage(o: MembershipOrder): string {
   const reason = (o.payment?.proof?.rejectionReason || "").trim().replace(/[.\s]+$/, "");
