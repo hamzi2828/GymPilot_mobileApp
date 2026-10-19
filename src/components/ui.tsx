@@ -172,11 +172,11 @@ export function Empty({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-export function Notice({ tone, children }: { tone: "error" | "ok" | "warn"; children: React.ReactNode }) {
+export function Notice({ tone, children, style }: { tone: "error" | "ok" | "warn"; children: React.ReactNode; style?: ViewStyle }) {
   const p = usePalette();
   const colour = tone === "error" ? p.danger : tone === "warn" ? p.warning : p.success;
   return (
-    <View style={{ backgroundColor: `${colour}22`, borderRadius: radius.md, padding: space.md, marginBottom: space.lg }}>
+    <View style={[{ backgroundColor: `${colour}22`, borderRadius: radius.md, padding: space.md, marginBottom: space.lg }, style]}>
       <Text style={{ color: colour, fontSize: 14, lineHeight: 20 }}>{children}</Text>
     </View>
   );

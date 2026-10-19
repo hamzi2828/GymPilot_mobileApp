@@ -2,11 +2,27 @@
 // to refresh, and keeps the field being typed in clear of the keyboard.
 
 import React, { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Image, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, SectionList, View, type SectionListProps } from "react-native";
+import { useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 import { Caption, Title } from "./ui";
+
+function ScreenHeader({ title, subtitle }: { title?: string; subtitle?: string }) {
+  if (!title && !subtitle) return null;
+  return (
+    <View style={{ marginBottom: space.xl }}>
+      {title ? <Title>{title}</Title> : null}
+      {subtitle ? <Caption style={{ marginTop: 4, fontSize: 14 }}>{subtitle}</Caption> : null}
+    </View>
+  );
+}
+
+const paddingFor = (insets: EdgeInsets) => ({
+  paddingTop: insets.top + space.lg,
+  paddingBottom: insets.bottom + space.xxl,
+  paddingHorizontal: space.lg,
+});
 
 export function Screen({
   children,
@@ -26,19 +42,8 @@ export function Screen({
   const p = usePalette();
   const insets = useSafeAreaInsets();
 
-  const header =
-    title || subtitle ? (
-      <View style={{ marginBottom: space.xl }}>
-        {title ? <Title>{title}</Title> : null}
-        {subtitle ? <Caption style={{ marginTop: 4, fontSize: 14 }}>{subtitle}</Caption> : null}
-      </View>
-    ) : null;
-
-  const padding = {
-    paddingTop: insets.top + space.lg,
-    paddingBottom: insets.bottom + space.xxl,
-    paddingHorizontal: space.lg,
-  };
+  const header = <ScreenHeader title={title} subtitle={subtitle} />;
+  const padding = paddingFor(insets);
 
   if (!scroll) {
     return (
@@ -67,6 +72,50 @@ export function Screen({
         {children}
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * A Screen whose body is one long list, grouped under headings (the
+ * timetable, a day at a time). It looks the same as Screen and scrolls the
+ * same, title and all, but draws the rows as they come into view rather than
+ * every one of them up front. `top` is what sits under the title, above the
+ * first heading; `ListEmptyComponent` stands in for the rows when there are
+ * none (still loading, could not load, nothing on).
+ */
+export function ScreenSectionList<ItemT, SectionT>({
+  title,
+  subtitle,
+  refreshing,
+  onRefresh,
+  top,
+  ...list
+}: {
+  title?: string;
+  subtitle?: string;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  top?: React.ReactNode;
+} & Omit<SectionListProps<ItemT, SectionT>, "ListHeaderComponent" | "refreshControl" | "style" | "contentContainerStyle">) {
+  const p = usePalette();
+  const insets = useSafeAreaInsets();
+  return (
+    <SectionList<ItemT, SectionT>
+      stickySectionHeadersEnabled={false}
+      keyboardShouldPersistTaps="handled"
+      {...list}
+      style={{ flex: 1, backgroundColor: p.base }}
+      contentContainerStyle={paddingFor(insets)}
+      refreshControl={
+        onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={p.accent} colors={[p.accent]} /> : undefined
+      }
+      ListHeaderComponent={
+        <>
+          <ScreenHeader title={title} subtitle={subtitle} />
+          {top}
+        </>
+      }
+    />
   );
 }
 
