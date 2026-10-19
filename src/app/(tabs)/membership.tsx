@@ -504,7 +504,14 @@ export default function Membership() {
               />
             ) : null}
 
-            {!r?.allowMemberFreeze && !r?.allowMemberCancel && !frozen && !stopping ? (
+            {/* What the gym lets members do never arrived (no signal, say):
+                that is not the same as the gym not allowing it, so say so,
+                with a way to ask again. Starting again and keeping the
+                membership need no rules, and stay. */}
+            {!r && rules.error && !(frozen && stopping) ? (
+              <LoadFailed message={`Your pause and cancel options could not be loaded. ${rules.error}`} onRetry={rules.reload} />
+            ) : null}
+            {r && !r.allowMemberFreeze && !r.allowMemberCancel && !frozen && !stopping ? (
               <Caption>Your gym handles pauses and cancellations at the front desk.</Caption>
             ) : null}
             {answerAt("actions")}
