@@ -98,7 +98,7 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
     errorCode,
     errorStatus,
     /** The gym as a whole is closed to its members; see useGymClosed. */
-    closed: isGymClosed(errorStatus, errorCode),
+    closed: isGymClosed(errorCode),
     loading,
     refreshing,
     reload: () => run("pull"),
@@ -120,7 +120,7 @@ export function useGymClosed(...loads: { closed: boolean; error: string | null }
   const [fromAction, setFromAction] = useState<string | null>(null);
   const load = loads.find((l) => l.closed);
   const caught = useCallback((e: unknown) => {
-    if (!(e instanceof ApiError) || !isGymClosed(e.status, e.code)) return false;
+    if (!(e instanceof ApiError) || !isGymClosed(e.code)) return false;
     setFromAction(e.message);
     return true;
   }, []);

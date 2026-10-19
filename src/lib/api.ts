@@ -41,13 +41,17 @@ const SESSION_OVER = new Set(["TOKEN_MISSING", "TOKEN_INVALID", "TOKEN_WRONG_GYM
 export const SESSION_ENDED_MESSAGE = "Your session ended. Please sign in again.";
 
 // The server's names for "the whole gym is closed to its members right now":
-// suspended by the platform, its GymsPilotPro subscription lapsed (which also
-// answers 402), or the member app switched off for it. Every request fails
-// the same way then, so screens say it once rather than under every section.
+// suspended by the platform, its GymsPilotPro subscription lapsed, or the
+// member app switched off for it. Every request fails the same way then, so
+// screens say it once rather than under every section.
+//
+// By name only, never by status. A lapsed gym answers 402, but so does a
+// class booking refused over the member's own membership (MEMBERSHIP_REQUIRED,
+// NO_SESSIONS_LEFT): that is the answer to one tap, said beside the class.
 const GYM_CLOSED = new Set(["TENANT_SUSPENDED", "SUBSCRIPTION_INACTIVE", "MEMBER_APP_NOT_INCLUDED"]);
 
-export function isGymClosed(status: number | null | undefined, code: string | null | undefined): boolean {
-  return status === 402 || (!!code && GYM_CLOSED.has(code));
+export function isGymClosed(code: string | null | undefined): boolean {
+  return !!code && GYM_CLOSED.has(code);
 }
 
 type Options = {
