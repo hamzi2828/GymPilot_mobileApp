@@ -30,6 +30,7 @@ import { newRequestId, readDeskCode } from "@/lib/deskCode";
 import { openPhoneSettings } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 import { useGymClosed } from "@/lib/useLoad";
 import { useRequireSession } from "@/lib/useRequireSession";
 import type { CheckInAnswer } from "@/lib/types";
@@ -142,7 +143,10 @@ export default function CheckIn() {
   const { caught, clear } = closed;
 
   const [permission, requestPermission, getPermission] = useCameraPermissions();
-  const [asking, setAsking] = useState(false);
+  // Asking for the camera, or opening the phone's settings to switch it on.
+  const permit = useAsyncAction<"allow" | "settings">();
+  // Try again, once until the gym has answered.
+  const again = useAsyncAction();
   const [phase, setPhase] = useState<Phase>({ kind: "scanning" });
   // A QR code that is not a desk code is in front of the camera.
   const [wrongCode, setWrongCode] = useState(false);
@@ -166,17 +170,15 @@ export default function CheckIn() {
     return () => subscription.remove();
   }, [granted, getPermission]);
 
-  const ask = async () => {
-    if (asking) return;
-    setAsking(true);
-    try {
-      await requestPermission();
-    } catch {
-      /* the hook is left saying not granted, which the screen already explains */
-    } finally {
-      setAsking(false);
-    }
-  };
+  const ask = () =>
+    permit.run("allow", async () => {
+      try {
+        await requestPermission();
+      } catch {
+        /* the hook is left saying not granted, which the screen already explains */
+      }
+    });
+  const openSettings = () => permit.run("settings", () => openPhoneSettings("the camera"));
 
   const send = useCallback(
     async (code: string, requestId: string, before?: Outcome) => {
@@ -234,7 +236,7 @@ export default function CheckIn() {
 
   // The same attempt, with the same id: see the top of the file.
   const retry = () => {
-    if (phase.kind === "done") void send(phase.code, phase.requestId, phase.outcome);
+    if (phase.kind === "done") void again.run("retry", () => send(phase.code, phase.requestId, phase.outcome));
   };
 
   const scanAgain = () => {
@@ -278,13 +280,20 @@ export default function CheckIn() {
               <Body muted style={{ marginTop: space.md }}>
                 Your phone will not ask again, so switch the camera on for GymsPilotPro in its settings, then come back here.
               </Body>
-              <Button label="Open phone settings" onPress={() => openPhoneSettings("the camera")} style={{ marginTop: space.lg }} />
+              <Button label="Open phone settings" onPress={openSettings} busy={permit.busy === "settings"} style={{ marginTop: space.lg }} />
             </>
           ) : (
             <>
-              <Button label="Allow the camera" onPress={ask} busy={asking} style={{ marginTop: space.lg }} />
+              <Button label="Allow the camera" onPress={ask} busy={permit.busy === "allow"} disabled={!!permit.busy} style={{ marginTop: space.lg }} />
               {askedBefore ? (
-                <Button label="Open phone settings" variant="quiet" onPress={() => openPhoneSettings("the camera")} style={{ marginTop: space.sm }} />
+                <Button
+                  label="Open phone settings"
+                  variant="quiet"
+                  onPress={openSettings}
+                  busy={permit.busy === "settings"}
+                  disabled={!!permit.busy}
+                  style={{ marginTop: space.sm }}
+                />
               ) : null}
             </>
           )}

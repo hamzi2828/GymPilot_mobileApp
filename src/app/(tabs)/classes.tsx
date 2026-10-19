@@ -5,7 +5,7 @@
 // it is full. The app shows what it is told and reports back what it says.
 
 import React, { useMemo, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Body, Caption, Card, Empty, GymClosed, LoadFailed, Loading, Notice, Pill } from "@/components/ui";
@@ -256,7 +256,7 @@ export default function Classes() {
                         </View>
                         <View style={{ alignItems: "flex-end", gap: 4 }}>
                           {busy ? (
-                            <Caption>…</Caption>
+                            <ActivityIndicator size="small" color={p.accent} />
                           ) : booked ? (
                             <Pill label={waitlisted ? `waitlist ${s.my_booking?.waitlist_position ?? ""}`.trim() : "booked"} tone={waitlisted ? "warn" : "good"} />
                           ) : s.is_cancelled ? (

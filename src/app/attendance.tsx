@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill, Stat } from "@/components/ui";
+import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill, Stat, WithSpinner } from "@/components/ui";
 import { usePalette } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
@@ -65,21 +65,28 @@ export default function Attendance() {
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.lg }}>
               {[{ key: "", label: "All" }, ...months.map((m) => ({ key: m.key, label: `${m.label} · ${m.visits}` }))].map((chip) => {
                 const on = (month || "") === chip.key;
+                // A month being fetched: its chip spins, and none can be
+                // picked until the visits are in.
+                const loading = attendance.refreshing;
                 return (
                   <Pressable
                     key={chip.key || "all"}
                     onPress={() => setMonth(chip.key || null)}
+                    disabled={loading}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: on }}
+                    accessibilityState={{ selected: on, disabled: loading, busy: on && loading }}
                     accessibilityLabel={chip.key ? `${chip.label.replace(" · ", ", ")} visits` : "All visits"}
                     style={{
                       backgroundColor: on ? p.accent : p.cardRaised,
                       borderRadius: radius.pill,
                       paddingHorizontal: space.lg,
                       paddingVertical: 8,
+                      opacity: loading && !on ? 0.5 : 1,
                     }}
                   >
-                    <Body style={{ color: on ? p.onAccent : p.textMuted, fontWeight: "700", fontSize: 13 }}>{chip.label}</Body>
+                    <WithSpinner busy={on && loading} colour={on ? p.onAccent : p.textMuted}>
+                      <Body style={{ color: on ? p.onAccent : p.textMuted, fontWeight: "700", fontSize: 13 }}>{chip.label}</Body>
+                    </WithSpinner>
                   </Pressable>
                 );
               })}
