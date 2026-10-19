@@ -98,13 +98,23 @@ export function Button({
   );
 }
 
+/**
+ * A labelled text box. The label and the hint are words on the screen, but a
+ * screen reader gets them from the box itself -- its name and its hint -- so
+ * it says what the box is for when the box is reached, rather than reading
+ * the label as a line of its own and then an unnamed "text field".
+ */
 export function Field({ label, hint, ...props }: { label: string; hint?: string } & TextInputProps) {
   const p = usePalette();
   return (
     <View style={{ marginBottom: space.lg }}>
-      <Text style={{ color: p.textMuted, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>{label}</Text>
+      <Text accessibilityElementsHidden importantForAccessibility="no" style={{ color: p.textMuted, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>
+        {label}
+      </Text>
       <TextInput
         placeholderTextColor={p.textFaint}
+        accessibilityLabel={label}
+        accessibilityHint={hint}
         {...props}
         style={[
           {
@@ -120,7 +130,11 @@ export function Field({ label, hint, ...props }: { label: string; hint?: string 
           props.style,
         ]}
       />
-      {hint ? <Caption style={{ marginTop: 6 }}>{hint}</Caption> : null}
+      {hint ? (
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Caption style={{ marginTop: 6 }}>{hint}</Caption>
+        </View>
+      ) : null}
     </View>
   );
 }

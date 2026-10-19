@@ -34,7 +34,9 @@ export function paletteFrom(tokens: ThemeTokens | undefined | null): Palette {
     ...t,
     text: "#ffffff",
     textMuted: "rgba(255,255,255,0.66)",
-    textFaint: "rgba(255,255,255,0.42)",
+    // The faintest text there is -- captions, the tab bar's other tabs -- and
+    // still at least 4.5:1 against every scheme's background and cards.
+    textFaint: "rgba(255,255,255,0.52)",
     border: "rgba(255,255,255,0.10)",
     card: t.surface,
     cardRaised: "rgba(255,255,255,0.06)",
