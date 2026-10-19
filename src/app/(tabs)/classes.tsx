@@ -144,7 +144,7 @@ export default function Classes() {
   if (closed.message) {
     return (
       <Screen title="Classes" refreshing={timetable.refreshing} onRefresh={reload}>
-        <GymClosed message={closed.message} />
+        <GymClosed message={closed.message} gone={closed.gone} />
       </Screen>
     );
   }

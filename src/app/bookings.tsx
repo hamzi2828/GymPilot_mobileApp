@@ -47,7 +47,7 @@ export default function Bookings() {
 
   return (
     <Screen title="Your bookings" subtitle="Classes you booked before today" refreshing={history.refreshing} onRefresh={history.reload}>
-      {closed.message ? <GymClosed message={closed.message} /> : history.error && history.data ? <Notice tone="error">{history.error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} gone={closed.gone} /> : history.error && history.data ? <Notice tone="error">{history.error}</Notice> : null}
 
       {closed.message ? null : history.loading && !history.data ? (
         <Loading />

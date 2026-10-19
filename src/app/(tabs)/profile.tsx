@@ -436,7 +436,7 @@ export default function Profile() {
   if (closed.message) {
     return (
       <Screen title="Profile" refreshing={profile.refreshing} onRefresh={reload}>
-        <GymClosed message={closed.message} />
+        <GymClosed message={closed.message} gone={closed.gone} />
       </Screen>
     );
   }

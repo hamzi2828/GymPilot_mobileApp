@@ -87,7 +87,7 @@ export default function Home() {
       </View>
 
       {closed.message ? (
-        <GymClosed message={closed.message} />
+        <GymClosed message={closed.message} gone={closed.gone} />
       ) : (
         <>
           {/* What the gym has to say. */}

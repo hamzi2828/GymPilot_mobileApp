@@ -261,7 +261,7 @@ export default function CheckIn() {
   const size = Math.min(width - space.lg * 2, MAX_VIEWFINDER);
 
   const body = () => {
-    if (closed.message) return <GymClosed message={closed.message} />;
+    if (closed.message) return <GymClosed message={closed.message} gone={closed.gone} />;
     if (!permission) return <Loading label="Getting the camera ready" />;
 
     // Not allowed yet. Before the phone's own question, and in place of it

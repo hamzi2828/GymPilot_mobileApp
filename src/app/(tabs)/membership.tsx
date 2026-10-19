@@ -279,7 +279,7 @@ export default function Membership() {
   if (closed.message) {
     return (
       <Screen title="Membership" refreshing={orders.refreshing} onRefresh={reload}>
-        <GymClosed message={closed.message} />
+        <GymClosed message={closed.message} gone={closed.gone} />
       </Screen>
     );
   }

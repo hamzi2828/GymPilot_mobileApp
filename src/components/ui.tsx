@@ -199,17 +199,20 @@ export function LoadFailed({ message, onRetry }: { message: string; onRetry: () 
 }
 
 /**
- * The whole gym is closed to its members right now (see useGymClosed): said
- * once, in place of the screen, with a way out. The reason is the server's.
+ * The whole gym is closed to its members right now, or (`gone`) no longer on
+ * GymsPilotPro at all (see useGymClosed): said once, in place of the screen,
+ * with a way out. A closed gym's reason is the server's.
  */
-export function GymClosed({ message }: { message: string }) {
+export function GymClosed({ message, gone }: { message: string; gone?: boolean }) {
   const { signOut } = useSession();
   const leaving = useAsyncAction();
   return (
     <>
       <Notice tone="warn">{message}</Notice>
       <Body muted style={{ marginBottom: space.lg }}>
-        This is between your gym and GymsPilotPro, not something you need to fix. Once it is sorted out, pull down to refresh and everything will be back.
+        {gone
+          ? "There is nothing to fix in the app, and nothing more it can show you. For anything about your membership, please contact your gym directly."
+          : "This is between your gym and GymsPilotPro, not something you need to fix. Once it is sorted out, pull down to refresh and everything will be back."}
       </Body>
       <Button label="Sign out" variant="secondary" busy={!!leaving.busy} onPress={() => leaving.run("signOut", () => signOut())} />
     </>

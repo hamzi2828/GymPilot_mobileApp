@@ -36,7 +36,7 @@ export default function Attendance() {
 
   return (
     <Screen title="Your visits" refreshing={attendance.refreshing} onRefresh={attendance.reload}>
-      {closed.message ? <GymClosed message={closed.message} /> : attendance.error && data ? <Notice tone="error">{attendance.error}</Notice> : null}
+      {closed.message ? <GymClosed message={closed.message} gone={closed.gone} /> : attendance.error && data ? <Notice tone="error">{attendance.error}</Notice> : null}
 
       {closed.message ? null : attendance.loading && !data ? (
         <Loading />

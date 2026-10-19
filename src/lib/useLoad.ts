@@ -8,7 +8,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import { api, ApiError, isGymClosed } from "./api";
+import { api, ApiError, GYM_GONE_MESSAGE, isGymClosed, isGymGone } from "./api";
 import { useSession } from "./session";
 
 export function useLoad<T>(path: string | null, deps: unknown[] = []) {
@@ -99,6 +99,8 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
     errorStatus,
     /** The gym as a whole is closed to its members; see useGymClosed. */
     closed: isGymClosed(errorCode),
+    /** The gym is not on GymsPilotPro any more; see useGymClosed. */
+    gone: isGymGone(errorCode),
     loading,
     refreshing,
     reload: () => run("pull"),
@@ -107,7 +109,8 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
 
 /**
  * "Your gym is closed to its members right now" -- suspended, its GymsPilotPro
- * subscription lapsed, or the member app switched off for it. Every request
+ * subscription lapsed, or the member app switched off for it -- or, `gone`,
+ * the gym's account is not on GymsPilotPro at all any more. Every request
  * fails the same way then, so a screen shows one notice (<GymClosed />) in
  * place of an error under every section.
  *
@@ -116,14 +119,25 @@ export function useLoad<T>(path: string | null, deps: unknown[] = []) {
  * shows the notice instead of the error. `clear` goes in pull-to-refresh, so
  * a gym that is open again gets its screen back.
  */
-export function useGymClosed(...loads: { closed: boolean; error: string | null }[]) {
-  const [fromAction, setFromAction] = useState<string | null>(null);
-  const load = loads.find((l) => l.closed);
+export function useGymClosed(...loads: { closed: boolean; gone: boolean; error: string | null }[]) {
+  const [fromAction, setFromAction] = useState<{ message: string; gone: boolean } | null>(null);
+  const gone = loads.find((l) => l.gone);
+  const load = gone || loads.find((l) => l.closed);
   const caught = useCallback((e: unknown) => {
-    if (!(e instanceof ApiError) || !isGymClosed(e.code)) return false;
-    setFromAction(e.message);
+    if (!(e instanceof ApiError)) return false;
+    if (isGymGone(e.code)) {
+      setFromAction({ message: GYM_GONE_MESSAGE, gone: true });
+      return true;
+    }
+    if (!isGymClosed(e.code)) return false;
+    setFromAction({ message: e.message, gone: false });
     return true;
   }, []);
   const clear = useCallback(() => setFromAction(null), []);
-  return { message: (load && load.error) || fromAction, caught, clear };
+  return {
+    message: (load && load.error) || fromAction?.message || null,
+    gone: load ? !!gone : !!fromAction?.gone,
+    caught,
+    clear,
+  };
 }

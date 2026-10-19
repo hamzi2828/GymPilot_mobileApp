@@ -54,6 +54,17 @@ export function isGymClosed(code: string | null | undefined): boolean {
   return !!code && GYM_CLOSED.has(code);
 }
 
+// The gym is not on GymsPilotPro any more: its account was deleted, so the
+// slug the app holds names nothing. The server's own words ("No gym is
+// connected to this domain") are written for the website; the member is told
+// in theirs, and every screen says it once, as it does for a closed gym.
+const GYM_GONE = "TENANT_NOT_FOUND";
+export const GYM_GONE_MESSAGE = "Your gym's account is no longer active on GymsPilotPro.";
+
+export function isGymGone(code: string | null | undefined): boolean {
+  return code === GYM_GONE;
+}
+
 type Options = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -126,13 +137,14 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   }
 
   if (!response.ok) {
-    const message = typeof payload.message === "string" ? payload.message : `Something went wrong (${response.status}).`;
-    throw new ApiError(
-      message,
-      response.status,
-      typeof payload.code === "string" ? payload.code : undefined,
-      typeof payload.error === "string" ? payload.error : undefined
-    );
+    const code = typeof payload.code === "string" ? payload.code : undefined;
+    const message =
+      tenant && isGymGone(code)
+        ? GYM_GONE_MESSAGE
+        : typeof payload.message === "string"
+          ? payload.message
+          : `Something went wrong (${response.status}).`;
+    throw new ApiError(message, response.status, code, typeof payload.error === "string" ? payload.error : undefined);
   }
 
   return payload as T;
