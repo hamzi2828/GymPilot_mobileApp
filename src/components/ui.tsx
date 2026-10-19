@@ -7,6 +7,7 @@ import { PRIVACY_URL, TERMS_URL } from "@/lib/config";
 import { openWeb } from "@/lib/open";
 import { usePalette, useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 
 export function Title({ children, style }: { children: React.ReactNode; style?: object }) {
   const p = usePalette();
@@ -73,6 +74,8 @@ export function Button({
       onPress={onPress}
       disabled={off}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!off, busy: !!busy }}
       style={({ pressed }) => [
         {
           backgroundColor: background,
@@ -88,7 +91,9 @@ export function Button({
         style,
       ]}
     >
-      {busy ? <ActivityIndicator color={colour} /> : <Text style={{ color: colour, fontWeight: "700", fontSize: 15 }}>{label}</Text>}
+      {/* The label stays, unseen, under the spinner, so the button keeps its size. */}
+      <Text style={{ color: colour, fontWeight: "700", fontSize: 15, opacity: busy ? 0 : 1 }}>{label}</Text>
+      {busy ? <ActivityIndicator color={colour} style={StyleSheet.absoluteFill} /> : null}
     </Pressable>
   );
 }
@@ -183,11 +188,12 @@ export function Notice({ tone, children }: { tone: "error" | "ok" | "warn"; chil
  * the timetable" is a different thing from "could not fetch the timetable",
  * and telling a member the first when the second happened sends them away.
  */
-export function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function LoadFailed({ message, onRetry }: { message: string; onRetry: () => unknown }) {
+  const retry = useAsyncAction();
   return (
     <>
       <Notice tone="error">{message}</Notice>
-      <Button label="Try again" variant="secondary" onPress={onRetry} />
+      <Button label="Try again" variant="secondary" busy={!!retry.busy} onPress={() => retry.run("retry", async () => onRetry())} />
     </>
   );
 }
@@ -198,13 +204,14 @@ export function LoadFailed({ message, onRetry }: { message: string; onRetry: () 
  */
 export function GymClosed({ message }: { message: string }) {
   const { signOut } = useSession();
+  const leaving = useAsyncAction();
   return (
     <>
       <Notice tone="warn">{message}</Notice>
       <Body muted style={{ marginBottom: space.lg }}>
         This is between your gym and GymsPilotPro, not something you need to fix. Once it is sorted out, pull down to refresh and everything will be back.
       </Body>
-      <Button label="Sign out" variant="secondary" onPress={() => signOut()} />
+      <Button label="Sign out" variant="secondary" busy={!!leaving.busy} onPress={() => leaving.run("signOut", () => signOut())} />
     </>
   );
 }
@@ -219,6 +226,21 @@ export function RowLink({ label, onPress }: { label: string; onPress: () => void
         <Body style={{ color: p.textFaint }}>›</Body>
       </Card>
     </Pressable>
+  );
+}
+
+/**
+ * The words of a link that starts something -- a page opening, a link being
+ * emailed -- with a small spinner in front of them until it has. Button does
+ * this by itself; this is for the lines of text that act as buttons.
+ */
+export function WithSpinner({ busy, colour, children }: { busy?: boolean; colour: string; children: React.ReactNode }) {
+  if (!busy) return <>{children}</>;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 }}>
+      <ActivityIndicator size="small" color={colour} />
+      {children}
+    </View>
   );
 }
 
@@ -249,9 +271,19 @@ export function Line({ label, value }: { label: string; value: React.ReactNode }
  */
 export function LegalLinks() {
   const p = usePalette();
+  const opening = useAsyncAction();
   const link = (label: string, url: string) => (
-    <Pressable onPress={() => openWeb(url)} hitSlop={10} accessibilityRole="link" accessibilityLabel={label}>
-      <Text style={{ color: p.textMuted, fontSize: 12.5, fontWeight: "600", textDecorationLine: "underline" }}>{label}</Text>
+    <Pressable
+      onPress={() => opening.run(label, () => openWeb(url))}
+      disabled={!!opening.busy}
+      hitSlop={10}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!opening.busy, busy: opening.busy === label }}
+    >
+      <WithSpinner busy={opening.busy === label} colour={p.textMuted}>
+        <Text style={{ color: p.textMuted, fontSize: 12.5, fontWeight: "600", textDecorationLine: "underline" }}>{label}</Text>
+      </WithSpinner>
     </Pressable>
   );
   return (

@@ -80,9 +80,7 @@ export default function Membership() {
   const closed = useGymClosed(orders, rules);
   const reload = () => {
     closed.clear();
-    orders.reload();
-    rules.reload();
-    onSale.reload();
+    return Promise.all([orders.reload(), rules.reload(), onSale.reload()]);
   };
 
   const list = orders.data?.data || [];

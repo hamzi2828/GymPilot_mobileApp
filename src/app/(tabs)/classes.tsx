@@ -37,7 +37,7 @@ export default function Classes() {
   const closed = useGymClosed(timetable);
   const reload = () => {
     closed.clear();
-    timetable.reload();
+    return timetable.reload();
   };
 
   const visible = useMemo(

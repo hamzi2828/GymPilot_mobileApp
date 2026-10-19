@@ -1,11 +1,12 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useNotificationTaps } from "@/lib/push";
 import { SessionProvider, usePalette, useSession } from "@/lib/session";
 import { paletteFrom, radius, space } from "@/lib/theme";
+import { useAsyncAction } from "@/lib/useAsyncAction";
 
 // Screens paint their own background, so the stack's is only ever seen for a
 // frame — but on the gym's colour rather than white, so that frame does not
@@ -60,6 +61,7 @@ export default function RootLayout() {
  */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const p = paletteFrom(null);
+  const again = useAsyncAction();
   return (
     <View style={{ flex: 1, backgroundColor: p.base, alignItems: "center", justifyContent: "center", padding: space.xl }}>
       <StatusBar style="light" />
@@ -70,18 +72,22 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         The app could not show that screen. Your account and your membership are not affected.
       </Text>
       <Pressable
-        onPress={() => void retry()}
+        onPress={() => void again.run("retry", () => retry())}
+        disabled={!!again.busy}
         accessibilityRole="button"
+        accessibilityLabel="Try again"
+        accessibilityState={{ disabled: !!again.busy, busy: !!again.busy }}
         style={({ pressed }) => ({
           backgroundColor: p.accent,
-          opacity: pressed ? 0.85 : 1,
+          opacity: again.busy ? 0.5 : pressed ? 0.85 : 1,
           borderRadius: radius.pill,
           paddingVertical: 14,
           paddingHorizontal: space.xxl,
           marginTop: space.xl,
         })}
       >
-        <Text style={{ color: p.onAccent, fontWeight: "700", fontSize: 15 }}>Try again</Text>
+        <Text style={{ color: p.onAccent, fontWeight: "700", fontSize: 15, opacity: again.busy ? 0 : 1 }}>Try again</Text>
+        {again.busy ? <ActivityIndicator color={p.onAccent} style={StyleSheet.absoluteFill} /> : null}
       </Pressable>
       <Text style={{ color: p.textFaint, fontSize: 12.5, lineHeight: 18, textAlign: "center", marginTop: space.lg }}>
         If this keeps happening, close the app and open it again, or let your gym know.
