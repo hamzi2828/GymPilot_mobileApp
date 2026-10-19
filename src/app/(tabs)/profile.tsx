@@ -18,7 +18,7 @@ import { pushSupported, registerForPush, usePushState } from "@/lib/push";
 import { usePalette, useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 import { useGymClosed, useLoad } from "@/lib/useLoad";
-import type { NotificationPreferences, NotificationSettings, Profile as ProfileData } from "@/lib/types";
+import type { FaceStatus, NotificationPreferences, NotificationSettings, Profile as ProfileData } from "@/lib/types";
 
 const MIN_PASSWORD = 8;
 
@@ -56,11 +56,13 @@ export default function Profile() {
   const profile = useLoad<{ data: ProfileData }>("/userDetailForProfile");
   const me = profile.data?.data;
   const notifications = useLoad<{ data: NotificationSettings }>("/user/notification-preferences");
-  const closed = useGymClosed(profile, notifications);
+  const face = useLoad<{ data: FaceStatus }>("/api/attendance/me/face");
+  const closed = useGymClosed(profile, notifications, face);
   const reload = () => {
     closed.clear();
     profile.reload();
     notifications.reload();
+    face.reload();
   };
 
   const [editing, setEditing] = useState(false);
@@ -75,6 +77,14 @@ export default function Profile() {
   // it is on its way, and what the server answered.
   const [sendingLink, setSendingLink] = useState(false);
   const [linkAnswer, setLinkAnswer] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // Removing their face data: whether it is on its way, and what came of it,
+  // shown in the face check-in card rather than at the top of the screen.
+  const [removingFace, setRemovingFace] = useState(false);
+  const [faceAnswer, setFaceAnswer] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // The status the removal answered. Until a fresh one arrives it is shown as
+  // off, so a reload that cannot get through does not say "on" beside
+  // "removed"; any later answer from the server replaces it.
+  const [faceRemovedFrom, setFaceRemovedFrom] = useState<FaceStatus | null>(null);
 
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", goals: "", currentPassword: "" });
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
@@ -298,6 +308,39 @@ export default function Profile() {
     }
   };
 
+  // The member withdrawing their consent to face check-in. The server deletes
+  // the face template outright; the desk can add it again, with consent, if
+  // they change their mind.
+  const removeFace = async () => {
+    if (removingFace) return;
+    const sure = await confirmAction({
+      title: "Remove your face data?",
+      message:
+        "The front desk will no longer recognise your face. You can still check in by scanning the code at the desk, or ask the desk to add your face again later.",
+      confirm: "Remove",
+      cancel: "Keep it",
+      destructive: true,
+    });
+    if (!sure) return;
+    setRemovingFace(true);
+    setFaceAnswer(null);
+    try {
+      await api<{ success: boolean; removed: number }>("/api/attendance/me/face", { method: "DELETE", session, onUnauthorised: signOut });
+      setFaceAnswer({ tone: "ok", text: "Your face data has been removed. The front desk can no longer check you in by face." });
+      setFaceRemovedFrom(face.data?.data ?? null);
+      face.reload();
+    } catch (e) {
+      if (closed.caught(e)) return;
+      setFaceAnswer({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not remove your face data. Please try again." });
+    } finally {
+      setRemovingFace(false);
+    }
+  };
+
+  const loadedFace = face.data?.data;
+  const faceStatus: FaceStatus | undefined =
+    loadedFace && loadedFace === faceRemovedFrom ? { enrolled: false, enrolled_at: null } : loadedFace;
+
   const username = me?.username || user?.username || "";
   const contact = branding?.contact;
   const phone = branding?.phone || contact?.phone || "";
@@ -512,6 +555,33 @@ export default function Profile() {
             {preferenceRow("marketing", "Offers and news", "Bookings, payments and reminders always reach you.")}
           </>
         )}
+      </Card>
+
+      {/* Whether the desk's webcam knows their face, and a way to take that back. */}
+      <Card style={{ marginBottom: space.lg }}>
+        <Heading>Face check-in</Heading>
+        {face.loading && !faceStatus ? (
+          <Loading />
+        ) : face.error && !faceStatus ? (
+          // A server from before face check-in has nothing to say about it.
+          <Caption>{face.errorStatus === 404 ? "Face check-in is not available at your gym yet." : face.error}</Caption>
+        ) : faceStatus ? (
+          <>
+            <Line label="Status" value={<Pill label={faceStatus.enrolled ? "on" : "off"} tone={faceStatus.enrolled ? "good" : "neutral"} />} />
+            {faceStatus.enrolled && faceStatus.enrolled_at ? <Line label="Added" value={longDate(faceStatus.enrolled_at)} /> : null}
+          </>
+        ) : null}
+        {faceStatus ? (
+          <Caption style={{ marginTop: space.sm }}>
+            Faces are added at the front desk, only with your consent; the gym keeps an encrypted face template, never a photo.
+          </Caption>
+        ) : null}
+        {faceStatus?.enrolled ? (
+          <Button label="Remove my face data" variant="danger" onPress={removeFace} busy={removingFace} style={{ marginTop: space.lg }} />
+        ) : null}
+        {faceAnswer ? (
+          <Caption style={{ color: faceAnswer.tone === "ok" ? p.success : p.danger, marginTop: space.sm }}>{faceAnswer.text}</Caption>
+        ) : null}
       </Card>
 
       {/* Where they train */}

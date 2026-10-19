@@ -152,6 +152,17 @@ export interface CheckInReceipt {
   balance_due_label?: string | null;
 }
 
+/**
+ * GET /api/attendance/me/face → data: whether the front desk holds a face
+ * template for this member, so its webcam can check them in. DELETE on the
+ * same path withdraws it and answers `{ success, removed }`.
+ */
+export interface FaceStatus {
+  enrolled: boolean;
+  /** When it was added (or last replaced); null when there is none. */
+  enrolled_at: string | null;
+}
+
 /** GET /api/gymfolio/timetable → data[] */
 export interface Session {
   class_id: string;

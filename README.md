@@ -16,7 +16,7 @@ only way in is a username the gym issued.
 | **Home**       | Check in, the gym's announcements, the membership at a glance, the next classes they booked, and how much they have trained. |
 | **Classes**    | The gym's timetable, day by day. Book a class, join the waitlist when it is full, cancel a booking — with a warning when the cancel is a late one. |
 | **Membership** | What they are on, what it costs, when it runs to, what it includes — pausing, restarting or cancelling it when their gym allows that — any balance still owed, changing the card it renews on, and a way to the website for plans and invoice PDFs. |
-| **Profile**    | Their details, their sign-in username, notification switches, the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
+| **Profile**    | Their details, their sign-in username, notification switches, whether the desk can check them in by face (and removing their face data), the gym's phone/email/website/opening hours, changing their password, signing out, deleting their account. |
 | **Check in**   | The camera, pointed at the code on the screen at the front desk: checked in (or out) there and then, with the answer on the screen — or why not. The camera is asked for only after saying why, and a member who said no is shown how to switch it on again. |
 | **Visits**     | Every visit the desk has recorded, month by month. |
 | **Bookings**   | Every class they booked before today: attended, missed, cancelled, cancelled late. |
@@ -364,6 +364,7 @@ the tenant header:
 | `GET /userDetailForProfile` · `PUT /update/user` · `PUT /user/change-password` · `DELETE /user` | the member's own record, and deleting it (these sit at the server root, not under `/api`) |
 | `GET` · `PUT /user/notification-preferences` · `GET /announcements/active` | how they want to hear from the gym, and what the gym is saying (also at the root) |
 | `GET /api/attendance/me` · `POST /api/attendance/me/checkin` | visits, and checking in with the code scanned at the desk |
+| `GET` · `DELETE /api/attendance/me/face` | whether the desk holds their face for check-in, and withdrawing it |
 | `GET /api/gymfolio/timetable` · `POST /api/gymfolio/bookings` · `DELETE /api/gymfolio/bookings/:id` · `GET /api/gymfolio/bookings/me?scope=past` | classes, and the booking history |
 | `GET /api/gymfolio/package-orders/me` · `GET /api/gymfolio/membership/rules` · `GET /api/gymfolio/packages/active` | the membership |
 | `POST /api/gymfolio/package-orders/:id/{freeze,unfreeze,cancel,resume}` | pausing, cancelling, and undoing a cancellation |
