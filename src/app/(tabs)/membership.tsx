@@ -24,7 +24,7 @@
 // checkout that was never paid is not shown at all.
 
 import React, { useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { AccessibilityInfo, Pressable, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { Body, Button, Caption, Card, Divider, Empty, GymClosed, Heading, Line, LoadFailed, Loading, Notice, Pill, WithSpinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
@@ -74,7 +74,13 @@ export default function Membership() {
   const { session, signOut, branding } = useSession();
   const p = usePalette();
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // What came of the last action, shown where it was asked for: under the
+  // card for a card change, under the buttons for a pause or a cancel.
+  const [message, setMessage] = useState<{ at: "actions" | "card"; tone: "ok" | "error"; text: string } | null>(null);
+  const say = (at: "actions" | "card", tone: "ok" | "error", text: string) => {
+    setMessage({ at, tone, text });
+    AccessibilityInfo.announceForAccessibility(text);
+  };
   const [pausing, setPausing] = useState(false);
   const now = useClock();
 
@@ -139,12 +145,12 @@ export default function Membership() {
       setBusy(label);
       setMessage(null);
       const res = await api<{ message?: string }>(path, { method: "POST", session, onUnauthorised: signOut, body });
-      setMessage({ tone: "ok", text: res.message || "Done." });
+      say("actions", "ok", res.message || "Done.");
       orders.reload();
     } catch (e) {
       if (closed.caught(e)) return;
       const refused = e instanceof ApiError && e.code ? PAUSE_REFUSED[e.code] : undefined;
-      setMessage({ tone: "error", text: refused || (e instanceof ApiError || e instanceof Error ? e.message : "That did not work.") });
+      say("actions", "error", refused || (e instanceof ApiError || e instanceof Error ? e.message : "That did not work."));
     } finally {
       acting.current = false;
       setBusy(null);
@@ -183,12 +189,20 @@ export default function Membership() {
       orders.reload();
     } catch (e) {
       if (closed.caught(e)) return;
-      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Your card page could not be opened just now." });
+      say("card", "error", e instanceof ApiError || e instanceof Error ? e.message : "Your card page could not be opened just now.");
     } finally {
       acting.current = false;
       setBusy(null);
     }
   };
+
+  /** The last answer, if it belongs here. */
+  const answerAt = (at: "actions" | "card") =>
+    message?.at === at ? (
+      <Notice tone={message.tone} style={{ marginTop: space.sm, marginBottom: 0 }}>
+        {message.text}
+      </Notice>
+    ) : null;
 
   // The invoice PDF needs the website's own sign-in, so the link goes to the
   // account page there, where every invoice can be downloaded.
@@ -286,7 +300,8 @@ export default function Membership() {
 
   return (
     <Screen title="Membership" refreshing={orders.refreshing} onRefresh={reload}>
-      {message ? <Notice tone={message.tone === "ok" ? "ok" : "error"}>{message.text}</Notice> : null}
+      {/* No membership on screen any more to put the answer beside. */}
+      {message && !current ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {orders.error && orders.data ? <Notice tone="error">{orders.error}</Notice> : null}
 
       {orders.loading ? (
@@ -375,6 +390,7 @@ export default function Membership() {
                 </WithSpinner>
               </Pressable>
             ) : null}
+            {!pastDue ? answerAt("card") : null}
           </Card>
 
           {owing > 0 ? (
@@ -391,7 +407,8 @@ export default function Membership() {
                 Payment failed — update your card to keep your membership.
                 {current.payment?.lastPaymentError ? ` (${current.payment.lastPaymentError})` : ""}
               </Notice>
-              <Button label={CARD} busy={busy === CARD} disabled={!!busy} onPress={() => openBilling(current)} style={{ marginBottom: space.lg }} />
+              <Button label={CARD} busy={busy === CARD} disabled={!!busy} onPress={() => openBilling(current)} />
+              <View style={{ marginBottom: space.lg }}>{answerAt("card")}</View>
             </>
           ) : null}
 
@@ -486,6 +503,7 @@ export default function Membership() {
             {!r?.allowMemberFreeze && !r?.allowMemberCancel && !frozen && !stopping ? (
               <Caption>Your gym handles pauses and cancellations at the front desk.</Caption>
             ) : null}
+            {answerAt("actions")}
           </View>
         </>
       )}

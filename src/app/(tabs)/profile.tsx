@@ -5,7 +5,7 @@
 // the app stores require of an app with sign-in.
 
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Switch, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Pressable, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { GymMark, Screen } from "@/components/Screen";
@@ -71,7 +71,14 @@ export default function Profile() {
   // Saving the details, changing the password, signing out, deleting the
   // account: one at a time, and the one under way shows the spinner.
   const account = useAsyncAction<"save" | "password" | "signOut" | "delete">();
-  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // What came of the last save, switch or deletion, shown beside the thing
+  // that was tapped -- the details card, the notifications card, or under
+  // Delete my account -- rather than at the top of a long screen.
+  const [message, setMessage] = useState<{ at: "details" | "notifications" | "account"; tone: "ok" | "error"; text: string } | null>(null);
+  const say = (at: "details" | "notifications" | "account", tone: "ok" | "error", text: string) => {
+    setMessage({ at, tone, text });
+    AccessibilityInfo.announceForAccessibility(text);
+  };
   // Shown inside the password card, next to the fields it is about.
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -185,13 +192,13 @@ export default function Profile() {
     };
     // What the server would refuse anyway, said before the round trip.
     if (!body.firstName || !body.lastName) {
-      setMessage({ tone: "error", text: "Your first and last name cannot be empty." });
+      say("details", "error", "Your first and last name cannot be empty.");
       return;
     }
     // An email address is optional: plenty of members have none, and the gym
     // signs them in by username. Only one that has been typed is checked.
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setMessage({ tone: "error", text: "That does not look like an email address. Leave it empty if you do not have one." });
+      say("details", "error", "That does not look like an email address. Leave it empty if you do not have one.");
       return;
     }
     return account.run("save", async () => {
@@ -200,12 +207,12 @@ export default function Profile() {
         const res = await api<{ message?: string; data?: ProfileData }>("/update/user", { method: "PUT", session, onUnauthorised: signOut, body });
         // Home greets the member by name: it should be the new one straight away.
         if (res.data) await updateUser(res.data);
-        setMessage({ tone: "ok", text: "Your details have been saved." });
+        say("details", "ok", "Your details have been saved.");
         setEditing(false);
         profile.reload();
       } catch (e) {
         if (closed.caught(e)) return;
-        setMessage({ tone: "error", text: saveProblem(e) });
+        say("details", "error", saveProblem(e));
       }
     });
   };
@@ -256,7 +263,7 @@ export default function Profile() {
     } catch (e) {
       setFlipped((f) => ({ ...f, [key]: !value }));
       if (closed.caught(e)) return;
-      setMessage({ tone: "error", text: e instanceof ApiError || e instanceof Error ? e.message : "Could not save that." });
+      say("notifications", "error", e instanceof ApiError || e instanceof Error ? e.message : "Could not save that.");
     }
   };
   const setPreference = (key: keyof NotificationPreferences, value: boolean) => pref.run(key, () => savePreference(key, value));
@@ -294,15 +301,15 @@ export default function Profile() {
           await tellMember("Account deleted", "Your account has been deleted.");
         } catch (e) {
           if (closed.caught(e)) return;
-          setMessage({
-            tone: "error",
-            text:
-              e instanceof ApiError && e.code === "SUBSCRIPTION_ACTIVE"
-                ? "Your account has not been deleted. Your membership renews by card and it could not be cancelled just now. Please try again in a few minutes, or ask the front desk to cancel the membership first."
-                : e instanceof ApiError || e instanceof Error
-                  ? e.message
-                  : "Could not delete your account.",
-          });
+          say(
+            "account",
+            "error",
+            e instanceof ApiError && e.code === "SUBSCRIPTION_ACTIVE"
+              ? "Your account has not been deleted. Your membership renews by card and it could not be cancelled just now. Please try again in a few minutes, or ask the front desk to cancel the membership first."
+              : e instanceof ApiError || e instanceof Error
+                ? e.message
+                : "Could not delete your account."
+          );
         }
       },
       () =>
@@ -345,6 +352,14 @@ export default function Profile() {
           destructive: true,
         })
     );
+
+  /** The last answer, if it belongs here. */
+  const answerAt = (at: "details" | "notifications" | "account") =>
+    message?.at === at ? (
+      <Notice tone={message.tone} style={{ marginTop: space.sm, marginBottom: 0 }}>
+        {message.text}
+      </Notice>
+    ) : null;
 
   const loadedFace = face.data?.data;
   const faceStatus: FaceStatus | undefined =
@@ -462,7 +477,6 @@ export default function Profile() {
         <Caption style={{ marginTop: 4 }}>{gymName}</Caption>
       </View>
 
-      {message ? <Notice tone={message.tone === "ok" ? "ok" : "error"}>{message.text}</Notice> : null}
       {profile.error ? <Notice tone="error">{profile.error}</Notice> : null}
 
       {/* The username the gym gave them, which is how they get back in. */}
@@ -523,6 +537,7 @@ export default function Profile() {
             hint="Your trainer sees this."
           />
           <Button label="Save" onPress={save} busy={account.busy === "save"} disabled={!!account.busy} />
+          {answerAt("details")}
           <Button label="Cancel" variant="quiet" onPress={() => setEditing(false)} style={{ marginTop: space.sm }} />
         </Card>
       ) : (
@@ -558,6 +573,7 @@ export default function Profile() {
             <Line label="Emergency contact" value={`${me.emergencyContact.name}${me.emergencyContact.phone ? ` · ${me.emergencyContact.phone}` : ""}`} />
           ) : null}
           {me?.createdAt ? <Line label="Member since" value={longDate(me.createdAt)} /> : null}
+          {answerAt("details")}
         </Card>
       )}
 
@@ -575,6 +591,7 @@ export default function Profile() {
             {channels?.sms ? preferenceRow("sms", "By text message") : null}
             {channels?.whatsapp ? preferenceRow("whatsapp", "On WhatsApp") : null}
             {preferenceRow("marketing", "Offers and news", "Bookings, payments and reminders always reach you.")}
+            {answerAt("notifications")}
           </>
         )}
       </Card>
@@ -742,6 +759,7 @@ export default function Profile() {
 
         <Button label="Sign out" variant="danger" onPress={confirmSignOut} busy={account.busy === "signOut"} disabled={!!account.busy} style={{ marginTop: space.md }} />
         <Button label="Delete my account" variant="quiet" onPress={deleteAccount} busy={account.busy === "delete"} disabled={!!account.busy} />
+        {answerAt("account")}
 
         <View style={{ alignItems: "center", marginTop: space.lg, gap: 2 }}>
           <Caption style={{ fontSize: 11 }}>{branding?.siteName || gymName}</Caption>
