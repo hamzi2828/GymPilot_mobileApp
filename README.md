@@ -91,11 +91,16 @@ The server marks every refused token with a `code` — `TOKEN_MISSING`,
 deactivated, or signed out everywhere). Only those sign the member out; the
 sign-in screen then shows the server's reason. Any other 401 — a wrong current
 password, a wrong 2FA code — is shown where it happened and the session stays.
+So is a 503 `SERVICE_UNAVAILABLE` (the server could not check the session):
+the screen offers Try again and the member stays signed in.
 A suspended gym, one whose subscription lapsed, or one without the member app
-(`TENANT_SUSPENDED`, `SUBSCRIPTION_INACTIVE` / any 402,
-`MEMBER_APP_NOT_INCLUDED`) shows one notice with a Sign out button on every
-screen — whether a screen's own loading or one of its buttons ran into it —
-rather than an error under every section. Pulling down to refresh tries again.
+(`TENANT_SUSPENDED`, `SUBSCRIPTION_INACTIVE`, `MEMBER_APP_NOT_INCLUDED` — by
+code, not by status: a 402 refusing one class booking over the member's own
+membership is shown under that class) shows one notice with a Sign out button
+on every screen — whether a screen's own loading or one of its buttons ran into
+it — rather than an error under every section. Pulling down to refresh tries
+again. A gym removed from GymsPilotPro (`TENANT_NOT_FOUND`) gets the same
+single notice, saying its account is no longer active.
 
 ### Deleting an account
 
